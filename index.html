@@ -5,11 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>3D 多人連線貪食蛇 - 展示館</title>
     <style>
-        /* 基礎樣式設定 */
         body { margin: 0; overflow: hidden; background: #02050f; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
         #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 
-        /* UI 層 - 置底列表 (極簡單排，適配 20 位學生) */
         #overlay {
             position: absolute;
             bottom: 0;
@@ -27,7 +25,7 @@
 
         #selection-grid {
             display: grid;
-            grid-template-columns: repeat(20, 1fr); /* 20個擠一排 */
+            grid-template-columns: repeat(20, 1fr);
             gap: 2px;
             width: 98%;
             max-width: 1200px;
@@ -42,15 +40,11 @@
             transition: transform 0.2s;
             text-align: center;
         }
-
-        /* 目前自己選中的角色 */
         .character-card.active { 
             border-color: #00f2ff; 
             background: rgba(0, 242, 255, 0.2); 
             transform: scale(1.1);
         }
-
-        /* 顯示其他玩家在線狀態 */
         .character-card.online::after {
             content: "";
             position: absolute;
@@ -60,7 +54,6 @@
             border-radius: 50%;
             box-shadow: 0 0 5px #00ff00;
         }
-
         .character-icon { 
             width: 100%; 
             aspect-ratio: 1/1; 
@@ -68,7 +61,6 @@
             background-position: center; 
             background-color: #111; 
         }
-
         .character-name { 
             font-size: 7px; 
             color: #aaa; 
@@ -78,7 +70,6 @@
             transform: scale(0.85);
         }
 
-        /* 手機搖桿樣式 */
         #joystick-zone {
             position: fixed;
             bottom: 80px;
@@ -86,7 +77,7 @@
             width: 120px;
             height: 120px;
             z-index: 200;
-            display: none; /* 預設隱藏，由媒體查詢開啟 */
+            display: none;
         }
         #joystick-base {
             width: 100%; height: 100%;
@@ -115,29 +106,40 @@
             pointer-events: none;
             z-index: 150;
         }
+
+        /* Firebase 未設定時的提示框 */
+        #firebase-notice {
+            position: fixed;
+            top: 50px; left: 15px;
+            color: #ffcc00;
+            background: rgba(30, 20, 0, 0.85);
+            padding: 8px 14px;
+            font-size: 11px;
+            border-left: 2px solid #ffcc00;
+            pointer-events: none;
+            z-index: 150;
+            line-height: 1.6;
+        }
         
-        /* 偵測觸控裝置以顯示搖桿 */
         @media (pointer: coarse) { #joystick-zone { display: block; } }
     </style>
 </head>
 <body>
 
     <div id="game-container"></div>
-    <div id="status-ui">正在初始化系統...</div>
+    <div id="status-ui">正在初始化...</div>
+    <div id="firebase-notice" style="display:none"></div>
 
-    <!-- 手機搖桿 UI -->
     <div id="joystick-zone">
         <div id="joystick-base">
             <div id="joystick-knob"></div>
         </div>
     </div>
 
-    <!-- 角色選擇 UI -->
     <div id="overlay">
         <div id="selection-grid"></div>
     </div>
 
-    <!-- 重要：修正 Module Specifier 錯誤的 Importmap -->
     <script type="importmap">
         {
             "imports": {
@@ -148,22 +150,25 @@
     </script>
 
     <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-        import { getFirestore, doc, setDoc, onSnapshot, collection, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
-        
-        // 使用 importmap 定義的名稱匯入，解決 TypeError 錯誤
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        // --- 1. Firebase 初始化 (由環境提供配置) ---
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'snake-multi';
+        // =====================================================================
+        // ★ 多人連線設定區（若不需要多人，保持 FIREBASE_ENABLED = false）
+        // =====================================================================
+        const FIREBASE_ENABLED = false; // ← 改成 true 並填入設定後啟用多人
+        const firebaseConfig = {
+            apiKey:            "填入你的 apiKey",
+            authDomain:        "填入你的 authDomain",
+            projectId:         "填入你的 projectId",
+            storageBucket:     "填入你的 storageBucket",
+            messagingSenderId: "填入你的 messagingSenderId",
+            appId:             "填入你的 appId"
+        };
+        const APP_ID = 'snake-multi'; // 可自訂
+        // =====================================================================
 
-        // --- 2. 學生角色數據定義 ---
+        // --- 學生角色數據 ---
         const students = [
             { name: "高安妤", color: 0xff4444 }, { name: "饒允志", color: 0x44ffff },
             { name: "朱采曼", color: 0x4444ff }, { name: "林宸慈", color: 0x44ff44 },
@@ -173,11 +178,11 @@
             { name: "金煜喬", color: 0xaa8866 }, { name: "陳品霖", color: 0x888888 },
             { name: "許博勛", color: 0xffaa00 }, { name: "陳湘妮", color: 0xffeeee },
             { name: "劉奕汝", color: 0xffcccc }, { name: "蔡明樺", color: 0xccccff },
-            { name: "鍾凱羽", color: 0xccffcc }, { name: "學員18", color: 0x333344 },
-            { name: "學員19", color: 0x333344 }, { name: "學員20", color: 0x333344 }
+            { name: "鍾凱羽", color: 0xccffcc }, { name: "學員18", color: 0x445566 },
+            { name: "學員19", color: 0x556677 }, { name: "學員20", color: 0x667788 }
         ];
 
-        // --- 3. Three.js 核心場景初始化 ---
+        // --- Three.js 初始化 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x02050f);
         scene.fog = new THREE.Fog(0x02050f, 15, 70);
@@ -189,102 +194,43 @@
         document.getElementById('game-container').appendChild(renderer.domElement);
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-        const light = new THREE.PointLight(0x00f2ff, 2, 50);
-        light.position.set(0, 10, 0);
-        scene.add(light);
+        const pointLight = new THREE.PointLight(0x00f2ff, 2, 50);
+        pointLight.position.set(0, 10, 0);
+        scene.add(pointLight);
+        scene.add(new THREE.GridHelper(500, 100, 0x1a2a4a, 0x051020));
 
-        // 建立場景地板
-        const grid = new THREE.GridHelper(500, 100, 0x1a2a4a, 0x051020);
-        scene.add(grid);
-
-        // --- 4. 遊戲狀態與變數 ---
+        // --- 遊戲狀態 ---
         let userId = null;
         let myIdx = 0;
         const myGroup = new THREE.Group();
         scene.add(myGroup);
 
         let myMixer = null;
-        let myActions = {};
+        let myActions = {};       // 注意：預設空物件，動畫操作前必須先 null 檢查
         let mySegments = [];
-        let myPath = []; // 存放歷史座標，用於身體跟隨
+        let myPath = [];
         const segmentSpacing = 10;
 
-        const otherPlayers = {}; // { uid: { group, segments, path, actions, mixer } }
+        const otherPlayers = {};
         const loader = new GLTFLoader();
         const keys = {};
-
-        // 搖桿控制數據
         let joyActive = false, joyX = 0, joyY = 0;
 
-        // --- 5. 多人同步邏輯 (符合規則：Auth First) ---
-        async function start() {
+        // --- 安全動畫切換（防止 undefined 崩潰）---
+        function safeSetRunning(actions, running) {
+            if (!actions || !actions.idle || !actions.run) return;
             try {
-                // 執行驗證
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
+                if (running && !actions.run.isRunning()) {
+                    actions.idle.fadeOut(0.2);
+                    actions.run.reset().fadeIn(0.2).play();
+                } else if (!running && actions.run.isRunning()) {
+                    actions.run.fadeOut(0.2);
+                    actions.idle.reset().fadeIn(0.2).play();
                 }
-
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        document.getElementById('status-ui').innerText = `已連接伺服器 | 使用 WASD 或 搖桿移動`;
-                        setupMultiplayer();
-                        switchCharacter(0); // 預設使用第一個角色
-                    }
-                });
-            } catch (e) {
-                console.error("Auth Error:", e);
-                document.getElementById('status-ui').innerText = "連線失敗，請重新整理頁面";
-            }
+            } catch(e) { /* 動畫切換失敗不崩潰 */ }
         }
 
-        function setupMultiplayer() {
-            // Firestore 監聽路徑 (Rule 1)
-            const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'players');
-            
-            onSnapshot(playersCol, (snap) => {
-                const onlineIdxs = [];
-                snap.forEach(docSnap => {
-                    const data = docSnap.data();
-                    const uid = docSnap.id;
-                    onlineIdxs.push(data.idx);
-
-                    if (uid === userId) return;
-                    handleRemotePlayer(uid, data);
-                });
-
-                // 清理已斷線的玩家
-                const currentUids = snap.docs.map(d => d.id);
-                Object.keys(otherPlayers).forEach(uid => {
-                    if (!currentUids.includes(uid)) removePlayer(uid);
-                });
-
-                updateUI(onlineIdxs);
-            }, (err) => console.error("Firestore Listen Error:", err));
-
-            // 每 100ms 上傳一次位置，維持同步
-            setInterval(uploadStatus, 100);
-        }
-
-        async function uploadStatus() {
-            if (!userId) return;
-            const playerDoc = doc(db, 'artifacts', appId, 'public', 'data', 'players', userId);
-            try {
-                await setDoc(playerDoc, {
-                    x: myGroup.position.x,
-                    z: myGroup.position.z,
-                    rot: myGroup.rotation.y,
-                    idx: myIdx,
-                    segCount: mySegments.length,
-                    isMoving: keys.isMoving || joyActive,
-                    lastSeen: Date.now()
-                }, { merge: true });
-            } catch(e) { console.error("Update Pos Error:", e); }
-        }
-
-        // --- 6. 模型處理邏輯 ---
+        // --- 模型載入（含安全 fallback）---
         async function loadModel(idx, targetGroup) {
             targetGroup.clear();
             const url = `student_${idx}.glb`;
@@ -294,24 +240,119 @@
                     const model = gltf.scene;
                     targetGroup.add(model);
                     const mixer = new THREE.AnimationMixer(model);
-                    // 根據模型動畫名稱，假設 0:Idle, 2:Run
-                    const actions = {
-                        idle: mixer.clipAction(gltf.animations[0]),
-                        run: mixer.clipAction(gltf.animations[2])
-                    };
-                    actions.idle.play();
+
+                    // ★ 修復：動畫索引不再寫死，依實際數量取用
+                    const anims = gltf.animations;
+                    const idleClip = anims[0] || null;
+                    const runClip  = anims[2] || anims[1] || anims[0] || null;
+
+                    const actions = {};
+                    if (idleClip) { actions.idle = mixer.clipAction(idleClip); actions.idle.play(); }
+                    if (runClip && runClip !== idleClip) { actions.run = mixer.clipAction(runClip); }
+
                     resolve({ mixer, actions });
-                }, undefined, (err) => {
-                    // 若 GLB 未準備好，使用方塊替代
-                    const mesh = new THREE.Mesh(
-                        new THREE.BoxGeometry(0.8, 1.8, 0.8), 
-                        new THREE.MeshStandardMaterial({ color: students[idx].color })
-                    );
+                }, undefined, () => {
+                    // GLB 不存在時使用彩色方塊替代，不崩潰
+                    const geometry = new THREE.BoxGeometry(0.8, 1.8, 0.8);
+                    const material = new THREE.MeshStandardMaterial({ color: students[idx].color });
+                    const mesh = new THREE.Mesh(geometry, material);
                     mesh.position.y = 0.9;
                     targetGroup.add(mesh);
-                    resolve({ mixer: null, actions: null });
+                    // 加個小光暈讓方塊好看一點
+                    const glow = new THREE.PointLight(students[idx].color, 0.5, 3);
+                    glow.position.y = 1;
+                    targetGroup.add(glow);
+                    resolve({ mixer: null, actions: {} });
                 });
             });
+        }
+
+        // --- 蛇身節段管理 ---
+        function adjustSegments(segArray, count, color) {
+            while (segArray.length < count) {
+                const s = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.3, 8, 8), 
+                    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.3 })
+                );
+                scene.add(s);
+                segArray.push(s);
+            }
+            while (segArray.length > count) {
+                scene.remove(segArray.pop());
+            }
+        }
+
+        // --- Firebase 多人功能（僅在 FIREBASE_ENABLED = true 時啟動）---
+        let db = null;
+
+        async function initFirebase() {
+            if (!FIREBASE_ENABLED) {
+                showNotice('單機模式｜若要開啟多人連線，請設定 FIREBASE_ENABLED = true 並填入 firebaseConfig');
+                document.getElementById('status-ui').innerText = '單機模式 | WASD / 搖桿 移動 | 空白鍵 增加蛇身';
+                return;
+            }
+
+            try {
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js');
+                const { getAuth, signInAnonymously, onAuthStateChanged } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js');
+                const { getFirestore, doc, setDoc, onSnapshot, collection } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js');
+
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                db = getFirestore(app);
+
+                await signInAnonymously(auth);
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('status-ui').innerText = '多人連線中 | WASD / 搖桿 移動';
+                        setupMultiplayer(db, collection, doc, setDoc, onSnapshot);
+                    }
+                });
+            } catch(e) {
+                console.error('Firebase 初始化失敗:', e);
+                showNotice('Firebase 連線失敗：' + e.message + '\n（切換至單機模式）');
+                document.getElementById('status-ui').innerText = '單機模式（Firebase 錯誤）';
+            }
+        }
+
+        function setupMultiplayer(db, collection, doc, setDoc, onSnapshot) {
+            const playersCol = collection(db, 'artifacts', APP_ID, 'public', 'data', 'players');
+            
+            onSnapshot(playersCol, (snap) => {
+                const onlineIdxs = [];
+                snap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const uid = docSnap.id;
+                    onlineIdxs.push(data.idx);
+                    if (uid === userId) return;
+                    handleRemotePlayer(uid, data);
+                });
+
+                const currentUids = snap.docs.map(d => d.id);
+                Object.keys(otherPlayers).forEach(uid => {
+                    if (!currentUids.includes(uid)) removePlayer(uid);
+                });
+
+                updateOnlineUI(onlineIdxs);
+            }, (err) => console.error('Firestore Listen Error:', err));
+
+            setInterval(async () => {
+                if (!userId) return;
+                const playerDoc = doc(db, 'artifacts', APP_ID, 'public', 'data', 'players', userId);
+                try {
+                    await setDoc(playerDoc, {
+                        x: myGroup.position.x,
+                        z: myGroup.position.z,
+                        rot: myGroup.rotation.y,
+                        idx: myIdx,
+                        segCount: mySegments.length,
+                        isMoving: keys.isMoving || joyActive,
+                        lastSeen: Date.now()
+                    }, { merge: true });
+                } catch(e) { console.error('上傳位置失敗:', e); }
+            }, 100);
         }
 
         async function handleRemotePlayer(uid, data) {
@@ -320,20 +361,17 @@
                 scene.add(group);
                 otherPlayers[uid] = { group, segments: [], path: [], idx: -1 };
             }
-
             const p = otherPlayers[uid];
             p.targetPos = new THREE.Vector3(data.x, 0, data.z);
             p.targetRot = data.rot;
             p.remoteMoving = data.isMoving;
 
-            // 換角色時載入新模型
             if (p.idx !== data.idx) {
                 p.idx = data.idx;
                 const res = await loadModel(p.idx, p.group);
-                p.mixer = res.mixer; p.actions = res.actions;
+                p.mixer = res.mixer;
+                p.actions = res.actions;
             }
-
-            // 同步遠端玩家的蛇身數量
             adjustSegments(p.segments, data.segCount, students[data.idx].color);
         }
 
@@ -345,69 +383,43 @@
             }
         }
 
-        function adjustSegments(segArray, count, color) {
-            while (segArray.length < count) {
-                const s = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.3, 8, 8), 
-                    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.2 })
-                );
-                scene.add(s);
-                segArray.push(s);
-            }
-            while (segArray.length > count) {
-                const s = segArray.pop();
-                scene.remove(s);
-            }
-        }
-
-        // --- 7. 手機搖桿觸控事件 ---
+        // --- 搖桿事件 ---
         const knob = document.getElementById('joystick-knob');
         window.addEventListener('touchstart', e => {
-            const touch = e.touches[0];
-            // 點擊左下角感應區觸發搖桿
-            if (touch.clientX < 200 && touch.clientY > window.innerHeight - 250) {
-                joyActive = true;
-            }
+            const t = e.touches[0];
+            if (t.clientX < 200 && t.clientY > window.innerHeight - 250) joyActive = true;
         });
-
         window.addEventListener('touchmove', e => {
             if (!joyActive) return;
-            const touch = e.touches[0];
-            const baseRect = document.getElementById('joystick-base').getBoundingClientRect();
-            const centerX = baseRect.left + baseRect.width/2;
-            const centerY = baseRect.top + baseRect.height/2;
-            
-            joyX = (touch.clientX - centerX) / 60;
-            joyY = (touch.clientY - centerY) / 60;
-            
-            const dist = Math.sqrt(joyX*joyX + joyY*joyY);
+            const t = e.touches[0];
+            const rect = document.getElementById('joystick-base').getBoundingClientRect();
+            joyX = (t.clientX - rect.left - rect.width/2) / 60;
+            joyY = (t.clientY - rect.top - rect.height/2) / 60;
+            const dist = Math.hypot(joyX, joyY);
             if (dist > 1) { joyX /= dist; joyY /= dist; }
-            
-            knob.style.transform = `translate(${joyX * 35}px, ${joyY * 35}px)`;
+            knob.style.transform = `translate(${joyX*35}px, ${joyY*35}px)`;
         });
-
         window.addEventListener('touchend', () => {
-            joyActive = false;
-            joyX = joyY = 0;
+            joyActive = false; joyX = joyY = 0;
             knob.style.transform = `translate(0, 0)`;
         });
 
-        // --- 8. 主動畫迴圈 ---
+        // --- 主動畫迴圈 ---
         const clock = new THREE.Clock();
         function animate() {
             requestAnimationFrame(animate);
             const delta = clock.getDelta();
 
-            // 處理本地玩家移動 (鍵盤)
+            // 鍵盤控制
             let moveSpeed = 0;
-            if (keys['w'] || keys['arrowup']) moveSpeed = 0.16;
-            if (keys['s'] || keys['arrowdown']) moveSpeed = -0.16;
-            if (keys['a'] || keys['arrowleft']) myGroup.rotation.y += 0.05;
+            if (keys['w'] || keys['arrowup'])    moveSpeed =  0.16;
+            if (keys['s'] || keys['arrowdown'])  moveSpeed = -0.16;
+            if (keys['a'] || keys['arrowleft'])  myGroup.rotation.y += 0.05;
             if (keys['d'] || keys['arrowright']) myGroup.rotation.y -= 0.05;
 
-            // 處理手機搖桿控制
+            // 搖桿控制
             if (joyActive) {
-                const dist = Math.sqrt(joyX*joyX + joyY*joyY);
+                const dist = Math.hypot(joyX, joyY);
                 if (dist > 0.1) {
                     myGroup.rotation.y = Math.atan2(-joyX, -joyY);
                     moveSpeed = 0.16 * dist;
@@ -418,43 +430,32 @@
             if (isMoving) myGroup.translateZ(moveSpeed);
             keys.isMoving = isMoving;
 
-            // 更新本地模型動畫
+            // ★ 修復：用安全函式切換動畫
             if (myMixer) {
                 myMixer.update(delta);
-                if (isMoving && !myActions.run.isRunning()) { 
-                    myActions.idle.fadeOut(0.2); 
-                    myActions.run.reset().fadeIn(0.2).play(); 
-                } else if (!isMoving && myActions.run.isRunning()) { 
-                    myActions.run.fadeOut(0.2); 
-                    myActions.idle.reset().fadeIn(0.2).play(); 
-                }
+                safeSetRunning(myActions, isMoving);
             }
 
-            // 本地蛇身移動路徑紀錄
-            myPath.unshift({ pos: myGroup.position.clone(), rot: myGroup.rotation.clone() });
+            // 本地蛇身路徑
+            myPath.unshift({ pos: myGroup.position.clone() });
             if (myPath.length > 300) myPath.pop();
             mySegments.forEach((s, i) => {
                 const step = (i + 1) * segmentSpacing;
-                if (myPath[step]) {
-                    s.position.lerp(myPath[step].pos, 0.4);
-                    s.rotation.copy(myPath[step].rot);
-                }
+                if (myPath[step]) s.position.lerp(myPath[step].pos, 0.4);
             });
 
-            // 更新所有遠端玩家 (平滑過渡)
+            // 遠端玩家更新
             for (let id in otherPlayers) {
                 const p = otherPlayers[id];
                 if (p.targetPos) p.group.position.lerp(p.targetPos, 0.2);
-                if (p.targetRot !== undefined) p.group.rotation.y = THREE.MathUtils.lerp(p.group.rotation.y, p.targetRot, 0.2);
-                
+                if (p.targetRot !== undefined) {
+                    p.group.rotation.y = THREE.MathUtils.lerp(p.group.rotation.y, p.targetRot, 0.2);
+                }
                 if (p.mixer) {
                     p.mixer.update(delta);
-                    if (p.remoteMoving && !p.actions.run.isRunning()) { p.actions.idle.stop(); p.actions.run.play(); }
-                    else if (!p.remoteMoving && p.actions.run.isRunning()) { p.actions.run.stop(); p.actions.idle.play(); }
+                    safeSetRunning(p.actions, p.remoteMoving);
                 }
-
-                // 遠端蛇身跟隨足跡
-                p.path.unshift({ pos: p.group.position.clone(), rot: p.group.rotation.clone() });
+                p.path.unshift({ pos: p.group.position.clone() });
                 if (p.path.length > 300) p.path.pop();
                 p.segments.forEach((s, i) => {
                     const step = (i + 1) * segmentSpacing;
@@ -470,16 +471,16 @@
             renderer.render(scene, camera);
         }
 
-        // --- 9. UI 互動與管理 ---
+        // --- UI ---
         function initUI() {
             const grid = document.getElementById('selection-grid');
             students.forEach((s, i) => {
                 const card = document.createElement('div');
                 card.className = 'character-card';
                 card.id = `card-${i}`;
-                const iconPath = `icon_${i}.jpg`;
+                const hex = new THREE.Color(s.color).getHexString();
                 card.innerHTML = `
-                    <div class="character-icon" style="background-color:#${new THREE.Color(s.color).getHexString()}; background-image:url('${iconPath}')"></div>
+                    <div class="character-icon" style="background-color:#${hex}; background-image:url('icon_${i}.jpg')"></div>
                     <div class="character-name">${s.name}</div>
                 `;
                 card.onclick = () => switchCharacter(i);
@@ -487,9 +488,8 @@
             });
         }
 
-        function updateUI(onlineIdxs) {
+        function updateOnlineUI(onlineIdxs) {
             document.querySelectorAll('.character-card').forEach((card, i) => {
-                // 檢查該角色是否正由其他玩家使用
                 card.classList.toggle('online', onlineIdxs.includes(i) && i !== myIdx);
                 card.classList.toggle('active', i === myIdx);
             });
@@ -497,26 +497,39 @@
 
         async function switchCharacter(idx) {
             myIdx = idx;
+            document.querySelectorAll('.character-card').forEach((c, i) => {
+                c.classList.toggle('active', i === idx);
+            });
             const res = await loadModel(idx, myGroup);
-            myMixer = res.mixer; myActions = res.actions;
+            myMixer = res.mixer;
+            myActions = res.actions;
         }
 
-        // --- 事件監聽 ---
-        window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
-        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
-        // 空白鍵增加資源 (測試用)
-        window.addEventListener('keydown', e => { 
-            if (e.code === 'Space') adjustSegments(mySegments, mySegments.length + 1, students[myIdx].color); 
+        function showNotice(msg) {
+            const el = document.getElementById('firebase-notice');
+            el.style.display = 'block';
+            el.innerHTML = msg.replace(/\n/g, '<br>');
+        }
+
+        // --- 鍵盤事件 ---
+        window.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.code === 'Space') {
+                adjustSegments(mySegments, mySegments.length + 1, students[myIdx].color);
+            }
         });
+        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // 啟動流程
+        // --- 啟動 ---
         initUI();
-        start();
+        switchCharacter(0);   // 預設第一個角色（用方塊顯示）
+        initFirebase();        // 嘗試啟動多人（FIREBASE_ENABLED=false 時跳過）
         animate();
 
     </script>
