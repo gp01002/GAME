@@ -2,15 +2,14 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 多人貪食蛇 - 虛擬主播展示館</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D 多人連線貪食蛇 - 展示館</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #02050f; font-family: "Microsoft JhengHei", sans-serif; }
-        
-        /* 遊戲畫布 */
+        /* 基礎樣式設定 */
+        body { margin: 0; overflow: hidden; background: #02050f; font-family: "Microsoft JhengHei", sans-serif; touch-action: none; }
         #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 
-        /* UI 層 - 置底列表 (更精簡) */
+        /* UI 層 - 置底列表 (極簡單排，適配 20 位學生) */
         #overlay {
             position: absolute;
             bottom: 0;
@@ -21,120 +20,124 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            border-top: 1px solid rgba(0, 242, 255, 0.3);
-            backdrop-filter: blur(5px);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            border-top: 1px solid rgba(0, 242, 255, 0.2);
         }
 
-        #title {
-            color: #7d8bff;
-            font-size: 14px;
-            font-weight: bold;
-            letter-spacing: 1px;
-            margin-bottom: 5px;
-        }
-
-        /* 20人單排網格 */
         #selection-grid {
             display: grid;
-            grid-template-columns: repeat(20, 1fr); /* 強制 20 欄一排 */
-            gap: 4px;
+            grid-template-columns: repeat(20, 1fr); /* 20個擠一排 */
+            gap: 2px;
             width: 98%;
-            max-width: 1400px;
+            max-width: 1200px;
         }
 
         .character-card {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.03);
             border: 1px solid #1a2a4a;
             cursor: pointer;
-            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 2px;
+            padding: 1px;
             position: relative;
-            overflow: visible;
-        }
-
-        /* 選中狀態 (LOGIN) */
-        .character-card.active {
-            border-color: #00f2ff;
-            background: rgba(0, 242, 255, 0.2);
-            box-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
-            z-index: 10;
-        }
-
-        /* LOGIN 標記改為一個更小的小紅點或文字 */
-        .character-card.active::after {
-            content: "● ON";
-            position: absolute;
-            top: -10px;
-            font-size: 8px;
-            color: #00f2ff;
-            text-shadow: 0 0 5px #000;
-        }
-
-        .character-card:hover {
-            transform: translateY(-5px);
-            border-color: #7d8bff;
-        }
-
-        .character-icon {
-            width: 100%;
-            aspect-ratio: 1 / 1;
-            background-size: cover;
-            background-position: center;
-            background-color: #111;
-            border-radius: 2px;
-        }
-
-        .character-name { 
-            font-size: 8px; /* 極小化文字 */
-            color: #eee; 
-            margin-top: 1px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            width: 100%;
+            transition: transform 0.2s;
             text-align: center;
         }
 
-        .character-id { 
-            position: absolute; 
-            top: 1px; 
-            left: 2px; 
-            font-size: 7px; 
-            color: rgba(255, 255, 255, 0.5); 
-            font-family: monospace;
-            pointer-events: none;
+        /* 目前自己選中的角色 */
+        .character-card.active { 
+            border-color: #00f2ff; 
+            background: rgba(0, 242, 255, 0.2); 
+            transform: scale(1.1);
         }
 
-        #score-ui {
+        /* 顯示其他玩家在線狀態 */
+        .character-card.online::after {
+            content: "";
+            position: absolute;
+            top: 2px; right: 2px;
+            width: 6px; height: 6px;
+            background: #00ff00;
+            border-radius: 50%;
+            box-shadow: 0 0 5px #00ff00;
+        }
+
+        .character-icon { 
+            width: 100%; 
+            aspect-ratio: 1/1; 
+            background-size: cover; 
+            background-position: center; 
+            background-color: #111; 
+        }
+
+        .character-name { 
+            font-size: 7px; 
+            color: #aaa; 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis;
+            transform: scale(0.85);
+        }
+
+        /* 手機搖桿樣式 */
+        #joystick-zone {
             position: fixed;
-            top: 15px;
-            right: 15px;
+            bottom: 80px;
+            left: 30px;
+            width: 120px;
+            height: 120px;
+            z-index: 200;
+            display: none; /* 預設隱藏，由媒體查詢開啟 */
+        }
+        #joystick-base {
+            width: 100%; height: 100%;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.2);
+            position: relative;
+        }
+        #joystick-knob {
+            position: absolute;
+            top: 35px; left: 35px;
+            width: 50px; height: 50px;
+            background: rgba(0, 242, 255, 0.6);
+            border-radius: 50%;
+            box-shadow: 0 0 15px rgba(0, 242, 255, 0.5);
+        }
+
+        #status-ui {
+            position: fixed;
+            top: 15px; left: 15px;
             color: #00f2ff;
             background: rgba(5, 10, 26, 0.7);
-            padding: 6px 12px;
-            border-radius: 4px;
-            border: 1px solid rgba(0, 242, 255, 0.3);
-            font-size: 12px;
+            padding: 5px 12px;
+            font-size: 11px;
+            border-left: 2px solid #00f2ff;
             pointer-events: none;
-            z-index: 100;
+            z-index: 150;
         }
+        
+        /* 偵測觸控裝置以顯示搖桿 */
+        @media (pointer: coarse) { #joystick-zone { display: block; } }
     </style>
 </head>
 <body>
 
     <div id="game-container"></div>
-    <div id="score-ui">RESOURCES: <span id="segment-count">0</span> | WASD MOVE | SPACE GROW</div>
+    <div id="status-ui">正在初始化系統...</div>
 
-    <div id="overlay">
-        <div id="title">SELECT STUDENT</div>
-        <div id="selection-grid">
-            <!-- 20 個角色由 JS 生成 -->
+    <!-- 手機搖桿 UI -->
+    <div id="joystick-zone">
+        <div id="joystick-base">
+            <div id="joystick-knob"></div>
         </div>
     </div>
 
+    <!-- 角色選擇 UI -->
+    <div id="overlay">
+        <div id="selection-grid"></div>
+    </div>
+
+    <!-- 重要：修正 Module Specifier 錯誤的 Importmap -->
     <script type="importmap">
         {
             "imports": {
@@ -145,27 +148,39 @@
     </script>
 
     <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getFirestore, doc, setDoc, onSnapshot, collection, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+        
+        // 使用 importmap 定義的名稱匯入，解決 TypeError 錯誤
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        // --- 1. 角色數據定義 ---
+        // --- 1. Firebase 初始化 (由環境提供配置) ---
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'snake-multi';
+
+        // --- 2. 學生角色數據定義 ---
         const students = [
-            { id: 1, name: "高安妤", color: 0xff4444 }, { id: 2, name: "饒允志", color: 0x44ffff },
-            { id: 3, name: "朱采曼", color: 0x4444ff }, { id: 4, name: "林宸慈", color: 0x44ff44 },
-            { id: 5, name: "駱采綺", color: 0xffff44 }, { id: 6, name: "莊芷媛", color: 0xff44ff },
-            { id: 7, name: "蘇汶欣", color: 0x8844ff }, { id: 8, name: "葉子菱", color: 0xff8844 },
-            { id: 9, name: "張羽涵", color: 0xffffff }, { id: 10, name: "高子媛", color: 0xffeeaa },
-            { id: 11, name: "金煜喬", color: 0xaa8866 }, { id: 12, name: "陳品霖", color: 0x888888 },
-            { id: 13, name: "許博勛", color: 0xffaa00 }, { id: 14, name: "陳湘妮", color: 0xffeeee },
-            { id: 15, name: "劉奕汝", color: 0xffcccc }, { id: 16, name: "蔡明樺", color: 0xccccff },
-            { id: 17, name: "鍾凱羽", color: 0xccffcc }, { id: 18, name: "學員18", color: 0x333344 },
-            { id: 19, name: "學員19", color: 0x333344 }, { id: 20, name: "學員20", color: 0x333344 }
+            { name: "高安妤", color: 0xff4444 }, { name: "饒允志", color: 0x44ffff },
+            { name: "朱采曼", color: 0x4444ff }, { name: "林宸慈", color: 0x44ff44 },
+            { name: "駱采綺", color: 0xffff44 }, { name: "莊芷媛", color: 0xff44ff },
+            { name: "蘇汶欣", color: 0x8844ff }, { name: "葉子菱", color: 0xff8844 },
+            { name: "張羽涵", color: 0xffffff }, { name: "高子媛", color: 0xffeeaa },
+            { name: "金煜喬", color: 0xaa8866 }, { name: "陳品霖", color: 0x888888 },
+            { name: "許博勛", color: 0xffaa00 }, { name: "陳湘妮", color: 0xffeeee },
+            { name: "劉奕汝", color: 0xffcccc }, { name: "蔡明樺", color: 0xccccff },
+            { name: "鍾凱羽", color: 0xccffcc }, { name: "學員18", color: 0x333344 },
+            { name: "學員19", color: 0x333344 }, { name: "學員20", color: 0x333344 }
         ];
 
-        // --- 2. 初始化 3D ---
+        // --- 3. Three.js 核心場景初始化 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x02050f);
-        scene.fog = new THREE.Fog(0x02050f, 20, 80);
+        scene.fog = new THREE.Fog(0x02050f, 15, 70);
 
         const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -173,141 +188,337 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.getElementById('game-container').appendChild(renderer.domElement);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-        dirLight.position.set(10, 20, 10);
-        scene.add(dirLight);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const light = new THREE.PointLight(0x00f2ff, 2, 50);
+        light.position.set(0, 10, 0);
+        scene.add(light);
 
-        const grid = new THREE.GridHelper(500, 100, 0x1a2a4a, 0x0a1a2a);
+        // 建立場景地板
+        const grid = new THREE.GridHelper(500, 100, 0x1a2a4a, 0x051020);
         scene.add(grid);
 
-        // --- 3. 變數 ---
-        let playerGroup = new THREE.Group();
-        scene.add(playerGroup);
+        // --- 4. 遊戲狀態與變數 ---
+        let userId = null;
+        let myIdx = 0;
+        const myGroup = new THREE.Group();
+        scene.add(myGroup);
 
-        let currentModel = null;
-        let mixer = null;
-        let actions = {};
-        
-        const segments = []; 
-        const pathHistory = []; 
-        const spacing = 8; // 縮短間隔讓蛇身更緊密
-        const moveSpeed = 0.15;
+        let myMixer = null;
+        let myActions = {};
+        let mySegments = [];
+        let myPath = []; // 存放歷史座標，用於身體跟隨
+        const segmentSpacing = 10;
+
+        const otherPlayers = {}; // { uid: { group, segments, path, actions, mixer } }
+        const loader = new GLTFLoader();
         const keys = {};
 
-        const loader = new GLTFLoader();
+        // 搖桿控制數據
+        let joyActive = false, joyX = 0, joyY = 0;
 
-        // --- 4. 切換功能 ---
-        async function selectCharacter(student) {
-            document.querySelectorAll('.character-card').forEach(card => {
-                card.classList.toggle('active', card.dataset.id == student.id);
-            });
-
-            if (currentModel) playerGroup.remove(currentModel);
-
-            const glbPath = `student_${student.id - 1}.glb`;
-            loader.load(
-                glbPath,
-                (gltf) => {
-                    currentModel = gltf.scene;
-                    playerGroup.add(currentModel);
-                    mixer = new THREE.AnimationMixer(currentModel);
-                    // 假設 0:Idle, 2:Run
-                    actions.idle = mixer.clipAction(gltf.animations[0]);
-                    actions.run = mixer.clipAction(gltf.animations[2]);
-                    actions.idle.play();
-                },
-                undefined,
-                () => {
-                    const geo = new THREE.BoxGeometry(0.8, 1.6, 0.8);
-                    const mat = new THREE.MeshStandardMaterial({ color: student.color });
-                    currentModel = new THREE.Mesh(geo, mat);
-                    currentModel.position.y = 0.8;
-                    playerGroup.add(currentModel);
-                    mixer = null;
+        // --- 5. 多人同步邏輯 (符合規則：Auth First) ---
+        async function start() {
+            try {
+                // 執行驗證
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
                 }
-            );
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('status-ui').innerText = `已連接伺服器 | 使用 WASD 或 搖桿移動`;
+                        setupMultiplayer();
+                        switchCharacter(0); // 預設使用第一個角色
+                    }
+                });
+            } catch (e) {
+                console.error("Auth Error:", e);
+                document.getElementById('status-ui').innerText = "連線失敗，請重新整理頁面";
+            }
         }
 
-        // --- 5. UI 生成 ---
-        const gridUI = document.getElementById('selection-grid');
-        students.forEach(s => {
-            const card = document.createElement('div');
-            card.className = 'character-card';
-            card.dataset.id = s.id;
-            const iconUrl = `icon_${s.id - 1}.jpg`;
-            card.innerHTML = `
-                <div class="character-id">${s.id}</div>
-                <div class="character-icon" style="background-color: #${new THREE.Color(s.color).getHexString()}; background-image: url('${iconUrl}')"></div>
-                <div class="character-name">${s.name}</div>
-            `;
-            card.onclick = () => selectCharacter(s);
-            gridUI.appendChild(card);
+        function setupMultiplayer() {
+            // Firestore 監聽路徑 (Rule 1)
+            const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'players');
+            
+            onSnapshot(playersCol, (snap) => {
+                const onlineIdxs = [];
+                snap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const uid = docSnap.id;
+                    onlineIdxs.push(data.idx);
+
+                    if (uid === userId) return;
+                    handleRemotePlayer(uid, data);
+                });
+
+                // 清理已斷線的玩家
+                const currentUids = snap.docs.map(d => d.id);
+                Object.keys(otherPlayers).forEach(uid => {
+                    if (!currentUids.includes(uid)) removePlayer(uid);
+                });
+
+                updateUI(onlineIdxs);
+            }, (err) => console.error("Firestore Listen Error:", err));
+
+            // 每 100ms 上傳一次位置，維持同步
+            setInterval(uploadStatus, 100);
+        }
+
+        async function uploadStatus() {
+            if (!userId) return;
+            const playerDoc = doc(db, 'artifacts', appId, 'public', 'data', 'players', userId);
+            try {
+                await setDoc(playerDoc, {
+                    x: myGroup.position.x,
+                    z: myGroup.position.z,
+                    rot: myGroup.rotation.y,
+                    idx: myIdx,
+                    segCount: mySegments.length,
+                    isMoving: keys.isMoving || joyActive,
+                    lastSeen: Date.now()
+                }, { merge: true });
+            } catch(e) { console.error("Update Pos Error:", e); }
+        }
+
+        // --- 6. 模型處理邏輯 ---
+        async function loadModel(idx, targetGroup) {
+            targetGroup.clear();
+            const url = `student_${idx}.glb`;
+            
+            return new Promise(resolve => {
+                loader.load(url, (gltf) => {
+                    const model = gltf.scene;
+                    targetGroup.add(model);
+                    const mixer = new THREE.AnimationMixer(model);
+                    // 根據模型動畫名稱，假設 0:Idle, 2:Run
+                    const actions = {
+                        idle: mixer.clipAction(gltf.animations[0]),
+                        run: mixer.clipAction(gltf.animations[2])
+                    };
+                    actions.idle.play();
+                    resolve({ mixer, actions });
+                }, undefined, (err) => {
+                    // 若 GLB 未準備好，使用方塊替代
+                    const mesh = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.8, 1.8, 0.8), 
+                        new THREE.MeshStandardMaterial({ color: students[idx].color })
+                    );
+                    mesh.position.y = 0.9;
+                    targetGroup.add(mesh);
+                    resolve({ mixer: null, actions: null });
+                });
+            });
+        }
+
+        async function handleRemotePlayer(uid, data) {
+            if (!otherPlayers[uid]) {
+                const group = new THREE.Group();
+                scene.add(group);
+                otherPlayers[uid] = { group, segments: [], path: [], idx: -1 };
+            }
+
+            const p = otherPlayers[uid];
+            p.targetPos = new THREE.Vector3(data.x, 0, data.z);
+            p.targetRot = data.rot;
+            p.remoteMoving = data.isMoving;
+
+            // 換角色時載入新模型
+            if (p.idx !== data.idx) {
+                p.idx = data.idx;
+                const res = await loadModel(p.idx, p.group);
+                p.mixer = res.mixer; p.actions = res.actions;
+            }
+
+            // 同步遠端玩家的蛇身數量
+            adjustSegments(p.segments, data.segCount, students[data.idx].color);
+        }
+
+        function removePlayer(uid) {
+            if (otherPlayers[uid]) {
+                scene.remove(otherPlayers[uid].group);
+                otherPlayers[uid].segments.forEach(s => scene.remove(s));
+                delete otherPlayers[uid];
+            }
+        }
+
+        function adjustSegments(segArray, count, color) {
+            while (segArray.length < count) {
+                const s = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.3, 8, 8), 
+                    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.2 })
+                );
+                scene.add(s);
+                segArray.push(s);
+            }
+            while (segArray.length > count) {
+                const s = segArray.pop();
+                scene.remove(s);
+            }
+        }
+
+        // --- 7. 手機搖桿觸控事件 ---
+        const knob = document.getElementById('joystick-knob');
+        window.addEventListener('touchstart', e => {
+            const touch = e.touches[0];
+            // 點擊左下角感應區觸發搖桿
+            if (touch.clientX < 200 && touch.clientY > window.innerHeight - 250) {
+                joyActive = true;
+            }
         });
 
-        selectCharacter(students[0]);
+        window.addEventListener('touchmove', e => {
+            if (!joyActive) return;
+            const touch = e.touches[0];
+            const baseRect = document.getElementById('joystick-base').getBoundingClientRect();
+            const centerX = baseRect.left + baseRect.width/2;
+            const centerY = baseRect.top + baseRect.height/2;
+            
+            joyX = (touch.clientX - centerX) / 60;
+            joyY = (touch.clientY - centerY) / 60;
+            
+            const dist = Math.sqrt(joyX*joyX + joyY*joyY);
+            if (dist > 1) { joyX /= dist; joyY /= dist; }
+            
+            knob.style.transform = `translate(${joyX * 35}px, ${joyY * 35}px)`;
+        });
 
-        // --- 6. 蛇身 ---
-        function addSegment() {
-            const geometry = new THREE.SphereGeometry(0.35, 12, 12);
-            const activeColor = new THREE.Color(students.find(s => s.id == document.querySelector('.active').dataset.id).color);
-            const material = new THREE.MeshStandardMaterial({ color: activeColor, emissive: activeColor, emissiveIntensity: 0.2 });
-            const seg = new THREE.Mesh(geometry, material);
-            scene.add(seg);
-            segments.push(seg);
-            document.getElementById('segment-count').innerText = segments.length;
-        }
+        window.addEventListener('touchend', () => {
+            joyActive = false;
+            joyX = joyY = 0;
+            knob.style.transform = `translate(0, 0)`;
+        });
 
-        // --- 7. 動畫迴圈 ---
+        // --- 8. 主動畫迴圈 ---
         const clock = new THREE.Clock();
         function animate() {
             requestAnimationFrame(animate);
             const delta = clock.getDelta();
 
-            if (currentModel) {
-                let isMoving = false;
-                if (keys['w'] || keys['arrowup']) { playerGroup.translateZ(moveSpeed); isMoving = true; }
-                if (keys['s'] || keys['arrowdown']) { playerGroup.translateZ(-moveSpeed); isMoving = true; }
-                if (keys['a'] || keys['arrowleft']) { playerGroup.rotation.y += 0.06; isMoving = true; }
-                if (keys['d'] || keys['arrowright']) { playerGroup.rotation.y -= 0.06; isMoving = true; }
+            // 處理本地玩家移動 (鍵盤)
+            let moveSpeed = 0;
+            if (keys['w'] || keys['arrowup']) moveSpeed = 0.16;
+            if (keys['s'] || keys['arrowdown']) moveSpeed = -0.16;
+            if (keys['a'] || keys['arrowleft']) myGroup.rotation.y += 0.05;
+            if (keys['d'] || keys['arrowright']) myGroup.rotation.y -= 0.05;
 
-                if (mixer) {
-                    mixer.update(delta);
-                    if (isMoving) {
-                        if (!actions.run.isRunning()) { actions.idle.fadeOut(0.2); actions.run.reset().fadeIn(0.2).play(); }
-                    } else {
-                        if (actions.run.isRunning()) { actions.run.fadeOut(0.2); actions.idle.reset().fadeIn(0.2).play(); }
-                    }
+            // 處理手機搖桿控制
+            if (joyActive) {
+                const dist = Math.sqrt(joyX*joyX + joyY*joyY);
+                if (dist > 0.1) {
+                    myGroup.rotation.y = Math.atan2(-joyX, -joyY);
+                    moveSpeed = 0.16 * dist;
+                }
+            }
+
+            const isMoving = moveSpeed !== 0;
+            if (isMoving) myGroup.translateZ(moveSpeed);
+            keys.isMoving = isMoving;
+
+            // 更新本地模型動畫
+            if (myMixer) {
+                myMixer.update(delta);
+                if (isMoving && !myActions.run.isRunning()) { 
+                    myActions.idle.fadeOut(0.2); 
+                    myActions.run.reset().fadeIn(0.2).play(); 
+                } else if (!isMoving && myActions.run.isRunning()) { 
+                    myActions.run.fadeOut(0.2); 
+                    myActions.idle.reset().fadeIn(0.2).play(); 
+                }
+            }
+
+            // 本地蛇身移動路徑紀錄
+            myPath.unshift({ pos: myGroup.position.clone(), rot: myGroup.rotation.clone() });
+            if (myPath.length > 300) myPath.pop();
+            mySegments.forEach((s, i) => {
+                const step = (i + 1) * segmentSpacing;
+                if (myPath[step]) {
+                    s.position.lerp(myPath[step].pos, 0.4);
+                    s.rotation.copy(myPath[step].rot);
+                }
+            });
+
+            // 更新所有遠端玩家 (平滑過渡)
+            for (let id in otherPlayers) {
+                const p = otherPlayers[id];
+                if (p.targetPos) p.group.position.lerp(p.targetPos, 0.2);
+                if (p.targetRot !== undefined) p.group.rotation.y = THREE.MathUtils.lerp(p.group.rotation.y, p.targetRot, 0.2);
+                
+                if (p.mixer) {
+                    p.mixer.update(delta);
+                    if (p.remoteMoving && !p.actions.run.isRunning()) { p.actions.idle.stop(); p.actions.run.play(); }
+                    else if (!p.remoteMoving && p.actions.run.isRunning()) { p.actions.run.stop(); p.actions.idle.play(); }
                 }
 
-                pathHistory.unshift({ pos: playerGroup.position.clone(), rot: playerGroup.rotation.clone() });
-                if (pathHistory.length > (segments.length + 1) * spacing) pathHistory.pop();
-
-                segments.forEach((seg, i) => {
-                    const targetIndex = (i + 1) * spacing;
-                    if (pathHistory[targetIndex]) {
-                        seg.position.lerp(pathHistory[targetIndex].pos, 0.3);
-                        seg.rotation.copy(pathHistory[targetIndex].rot);
-                    }
+                // 遠端蛇身跟隨足跡
+                p.path.unshift({ pos: p.group.position.clone(), rot: p.group.rotation.clone() });
+                if (p.path.length > 300) p.path.pop();
+                p.segments.forEach((s, i) => {
+                    const step = (i + 1) * segmentSpacing;
+                    if (p.path[step]) s.position.lerp(p.path[step].pos, 0.4);
                 });
-
-                const idealOffset = new THREE.Vector3(0, 5, -12).applyMatrix4(playerGroup.matrixWorld);
-                camera.position.lerp(idealOffset, 0.1);
-                camera.lookAt(playerGroup.position.x, playerGroup.position.y + 1, playerGroup.position.z);
             }
+
+            // 攝影機跟隨
+            const idealCam = new THREE.Vector3(0, 5, -12).applyMatrix4(myGroup.matrixWorld);
+            camera.position.lerp(idealCam, 0.1);
+            camera.lookAt(myGroup.position.x, 1, myGroup.position.z);
+
             renderer.render(scene, camera);
         }
 
+        // --- 9. UI 互動與管理 ---
+        function initUI() {
+            const grid = document.getElementById('selection-grid');
+            students.forEach((s, i) => {
+                const card = document.createElement('div');
+                card.className = 'character-card';
+                card.id = `card-${i}`;
+                const iconPath = `icon_${i}.jpg`;
+                card.innerHTML = `
+                    <div class="character-icon" style="background-color:#${new THREE.Color(s.color).getHexString()}; background-image:url('${iconPath}')"></div>
+                    <div class="character-name">${s.name}</div>
+                `;
+                card.onclick = () => switchCharacter(i);
+                grid.appendChild(card);
+            });
+        }
+
+        function updateUI(onlineIdxs) {
+            document.querySelectorAll('.character-card').forEach((card, i) => {
+                // 檢查該角色是否正由其他玩家使用
+                card.classList.toggle('online', onlineIdxs.includes(i) && i !== myIdx);
+                card.classList.toggle('active', i === myIdx);
+            });
+        }
+
+        async function switchCharacter(idx) {
+            myIdx = idx;
+            const res = await loadModel(idx, myGroup);
+            myMixer = res.mixer; myActions = res.actions;
+        }
+
+        // --- 事件監聽 ---
         window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
         window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
-        window.addEventListener('keydown', e => { if(e.code === 'Space') addSegment(); });
+        // 空白鍵增加資源 (測試用)
+        window.addEventListener('keydown', e => { 
+            if (e.code === 'Space') adjustSegments(mySegments, mySegments.length + 1, students[myIdx].color); 
+        });
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
+        // 啟動流程
+        initUI();
+        start();
         animate();
+
     </script>
 </body>
 </html>
