@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 多人貪食蛇 - 虛擬主播展示館</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #02050f; font-family: "Microsoft JhengHei", sans-serif; }
+        
+        /* 遊戲畫布 */
+        #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+        /* UI 層 - 置底列表 (更精簡) */
+        #overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(5, 10, 26, 0.85);
+            padding: 5px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border-top: 1px solid rgba(0, 242, 255, 0.3);
+            backdrop-filter: blur(5px);
+        }
+
+        #title {
+            color: #7d8bff;
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+
+        /* 20人單排網格 */
+        #selection-grid {
+            display: grid;
+            grid-template-columns: repeat(20, 1fr); /* 強制 20 欄一排 */
+            gap: 4px;
+            width: 98%;
+            max-width: 1400px;
+        }
+
+        .character-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid #1a2a4a;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2px;
+            position: relative;
+            overflow: visible;
+        }
+
+        /* 選中狀態 (LOGIN) */
+        .character-card.active {
+            border-color: #00f2ff;
+            background: rgba(0, 242, 255, 0.2);
+            box-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+            z-index: 10;
+        }
+
+        /* LOGIN 標記改為一個更小的小紅點或文字 */
+        .character-card.active::after {
+            content: "● ON";
+            position: absolute;
+            top: -10px;
+            font-size: 8px;
+            color: #00f2ff;
+            text-shadow: 0 0 5px #000;
+        }
+
+        .character-card:hover {
+            transform: translateY(-5px);
+            border-color: #7d8bff;
+        }
+
+        .character-icon {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            background-size: cover;
+            background-position: center;
+            background-color: #111;
+            border-radius: 2px;
+        }
+
+        .character-name { 
+            font-size: 8px; /* 極小化文字 */
+            color: #eee; 
+            margin-top: 1px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            text-align: center;
+        }
+
+        .character-id { 
+            position: absolute; 
+            top: 1px; 
+            left: 2px; 
+            font-size: 7px; 
+            color: rgba(255, 255, 255, 0.5); 
+            font-family: monospace;
+            pointer-events: none;
+        }
+
+        #score-ui {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            color: #00f2ff;
+            background: rgba(5, 10, 26, 0.7);
+            padding: 6px 12px;
+            border-radius: 4px;
+            border: 1px solid rgba(0, 242, 255, 0.3);
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container"></div>
+    <div id="score-ui">RESOURCES: <span id="segment-count">0</span> | WASD MOVE | SPACE GROW</div>
+
+    <div id="overlay">
+        <div id="title">SELECT STUDENT</div>
+        <div id="selection-grid">
+            <!-- 20 個角色由 JS 生成 -->
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // --- 1. 角色數據定義 ---
+        const students = [
+            { id: 1, name: "高安妤", color: 0xff4444 }, { id: 2, name: "饒允志", color: 0x44ffff },
+            { id: 3, name: "朱采曼", color: 0x4444ff }, { id: 4, name: "林宸慈", color: 0x44ff44 },
+            { id: 5, name: "駱采綺", color: 0xffff44 }, { id: 6, name: "莊芷媛", color: 0xff44ff },
+            { id: 7, name: "蘇汶欣", color: 0x8844ff }, { id: 8, name: "葉子菱", color: 0xff8844 },
+            { id: 9, name: "張羽涵", color: 0xffffff }, { id: 10, name: "高子媛", color: 0xffeeaa },
+            { id: 11, name: "金煜喬", color: 0xaa8866 }, { id: 12, name: "陳品霖", color: 0x888888 },
+            { id: 13, name: "許博勛", color: 0xffaa00 }, { id: 14, name: "陳湘妮", color: 0xffeeee },
+            { id: 15, name: "劉奕汝", color: 0xffcccc }, { id: 16, name: "蔡明樺", color: 0xccccff },
+            { id: 17, name: "鍾凱羽", color: 0xccffcc }, { id: 18, name: "學員18", color: 0x333344 },
+            { id: 19, name: "學員19", color: 0x333344 }, { id: 20, name: "學員20", color: 0x333344 }
+        ];
+
+        // --- 2. 初始化 3D ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x02050f);
+        scene.fog = new THREE.Fog(0x02050f, 20, 80);
+
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('game-container').appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+
+        const grid = new THREE.GridHelper(500, 100, 0x1a2a4a, 0x0a1a2a);
+        scene.add(grid);
+
+        // --- 3. 變數 ---
+        let playerGroup = new THREE.Group();
+        scene.add(playerGroup);
+
+        let currentModel = null;
+        let mixer = null;
+        let actions = {};
+        
+        const segments = []; 
+        const pathHistory = []; 
+        const spacing = 8; // 縮短間隔讓蛇身更緊密
+        const moveSpeed = 0.15;
+        const keys = {};
+
+        const loader = new GLTFLoader();
+
+        // --- 4. 切換功能 ---
+        async function selectCharacter(student) {
+            document.querySelectorAll('.character-card').forEach(card => {
+                card.classList.toggle('active', card.dataset.id == student.id);
+            });
+
+            if (currentModel) playerGroup.remove(currentModel);
+
+            const glbPath = `student_${student.id - 1}.glb`;
+            loader.load(
+                glbPath,
+                (gltf) => {
+                    currentModel = gltf.scene;
+                    playerGroup.add(currentModel);
+                    mixer = new THREE.AnimationMixer(currentModel);
+                    // 假設 0:Idle, 2:Run
+                    actions.idle = mixer.clipAction(gltf.animations[0]);
+                    actions.run = mixer.clipAction(gltf.animations[2]);
+                    actions.idle.play();
+                },
+                undefined,
+                () => {
+                    const geo = new THREE.BoxGeometry(0.8, 1.6, 0.8);
+                    const mat = new THREE.MeshStandardMaterial({ color: student.color });
+                    currentModel = new THREE.Mesh(geo, mat);
+                    currentModel.position.y = 0.8;
+                    playerGroup.add(currentModel);
+                    mixer = null;
+                }
+            );
+        }
+
+        // --- 5. UI 生成 ---
+        const gridUI = document.getElementById('selection-grid');
+        students.forEach(s => {
+            const card = document.createElement('div');
+            card.className = 'character-card';
+            card.dataset.id = s.id;
+            const iconUrl = `icon_${s.id - 1}.jpg`;
+            card.innerHTML = `
+                <div class="character-id">${s.id}</div>
+                <div class="character-icon" style="background-color: #${new THREE.Color(s.color).getHexString()}; background-image: url('${iconUrl}')"></div>
+                <div class="character-name">${s.name}</div>
+            `;
+            card.onclick = () => selectCharacter(s);
+            gridUI.appendChild(card);
+        });
+
+        selectCharacter(students[0]);
+
+        // --- 6. 蛇身 ---
+        function addSegment() {
+            const geometry = new THREE.SphereGeometry(0.35, 12, 12);
+            const activeColor = new THREE.Color(students.find(s => s.id == document.querySelector('.active').dataset.id).color);
+            const material = new THREE.MeshStandardMaterial({ color: activeColor, emissive: activeColor, emissiveIntensity: 0.2 });
+            const seg = new THREE.Mesh(geometry, material);
+            scene.add(seg);
+            segments.push(seg);
+            document.getElementById('segment-count').innerText = segments.length;
+        }
+
+        // --- 7. 動畫迴圈 ---
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            if (currentModel) {
+                let isMoving = false;
+                if (keys['w'] || keys['arrowup']) { playerGroup.translateZ(moveSpeed); isMoving = true; }
+                if (keys['s'] || keys['arrowdown']) { playerGroup.translateZ(-moveSpeed); isMoving = true; }
+                if (keys['a'] || keys['arrowleft']) { playerGroup.rotation.y += 0.06; isMoving = true; }
+                if (keys['d'] || keys['arrowright']) { playerGroup.rotation.y -= 0.06; isMoving = true; }
+
+                if (mixer) {
+                    mixer.update(delta);
+                    if (isMoving) {
+                        if (!actions.run.isRunning()) { actions.idle.fadeOut(0.2); actions.run.reset().fadeIn(0.2).play(); }
+                    } else {
+                        if (actions.run.isRunning()) { actions.run.fadeOut(0.2); actions.idle.reset().fadeIn(0.2).play(); }
+                    }
+                }
+
+                pathHistory.unshift({ pos: playerGroup.position.clone(), rot: playerGroup.rotation.clone() });
+                if (pathHistory.length > (segments.length + 1) * spacing) pathHistory.pop();
+
+                segments.forEach((seg, i) => {
+                    const targetIndex = (i + 1) * spacing;
+                    if (pathHistory[targetIndex]) {
+                        seg.position.lerp(pathHistory[targetIndex].pos, 0.3);
+                        seg.rotation.copy(pathHistory[targetIndex].rot);
+                    }
+                });
+
+                const idealOffset = new THREE.Vector3(0, 5, -12).applyMatrix4(playerGroup.matrixWorld);
+                camera.position.lerp(idealOffset, 0.1);
+                camera.lookAt(playerGroup.position.x, playerGroup.position.y + 1, playerGroup.position.z);
+            }
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+        window.addEventListener('keydown', e => { if(e.code === 'Space') addSegment(); });
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
