@@ -40,6 +40,7 @@
             position:fixed; top:15px; left:15px; color:#00f2ff;
             background:rgba(5,10,26,0.7); padding:5px 12px; font-size:11px;
             border-left:2px solid #00f2ff; pointer-events:none; z-index:150;
+            line-height:1.8;
         }
         #score-ui {
             position:fixed; top:15px; right:15px; color:#ffee44;
@@ -48,8 +49,8 @@
             text-align:right; line-height:2;
         }
         #eat-flash {
-            position:fixed; top:45%; left:50%; transform:translate(-50%,-50%);
-            font-size:30px; font-weight:bold; color:#fff;
+            position:fixed; top:42%; left:50%; transform:translate(-50%,-50%);
+            font-size:32px; font-weight:bold; color:#fff;
             pointer-events:none; z-index:300; opacity:0;
             transition:opacity 0.15s; text-shadow:0 0 20px #0ff;
         }
@@ -57,29 +58,26 @@
     </style>
 </head>
 <body>
-
 <div id="game-container"></div>
-<div id="status-ui">正在連線...</div>
+<div id="status-ui">🔄 正在連線...</div>
 <div id="score-ui">🐍 長度：1</div>
 <div id="eat-flash"></div>
-
-<div id="joystick-zone">
-    <div id="joystick-base"><div id="joystick-knob"></div></div>
-</div>
+<div id="joystick-zone"><div id="joystick-base"><div id="joystick-knob"></div></div></div>
 <div id="overlay"><div id="selection-grid"></div></div>
 
 <script type="importmap">
-{ "imports": { "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
 </script>
-
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { initializeApp }             from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+import { initializeApp }              from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
 import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, getDocs, addDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
-// ── Firebase ─────────────────────────────────────────────────
+// ════════════════════════════════════════════
+//  Firebase 設定
+// ════════════════════════════════════════════
 const firebaseConfig = {
     apiKey:"AIzaSyB2rWVtiPF7FUBNztORts6X6lS2MGLUqvE",
     authDomain:"game-ee5db.firebaseapp.com",
@@ -90,17 +88,22 @@ const firebaseConfig = {
 };
 const APP_ID = 'snake-multi';
 
-// ── 遊戲常數 ─────────────────────────────────────────────────
+// ════════════════════════════════════════════
+//  遊戲常數
+// ════════════════════════════════════════════
 const FOOD_MAX      = 15;
 const FOOD_EAT_DIST = 1.8;
 const STEAL_DIST    = 1.3;
 const SEG_SPACING   = 10;
 const MOVE_SPEED    = 0.18;
 const TURN_SPEED    = 0.055;
-const FIELD_SIZE    = 40;
+const FIELD_SIZE    = 38;
 const STEAL_AMOUNT  = 3;
+const FOOD_COLORS   = [0xff3333,0x33ff66,0xffff33,0xff33ff,0x33ffff,0xff8800,0xffffff,0x00aaff,0xff6699];
 
-// ── 角色定義 ─────────────────────────────────────────────────
+// ════════════════════════════════════════════
+//  角色
+// ════════════════════════════════════════════
 const students = [
     {name:"高安妤",color:0xff4444},{name:"饒允志",color:0x44ffff},
     {name:"朱采曼",color:0x4444ff},{name:"林宸慈",color:0x44ff44},
@@ -114,10 +117,12 @@ const students = [
     {name:"學員19",color:0x556677},{name:"學員20",color:0x667788}
 ];
 
-// ── Three.js ─────────────────────────────────────────────────
+// ════════════════════════════════════════════
+//  Three.js 場景
+// ════════════════════════════════════════════
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x02050f);
-scene.fog = new THREE.Fog(0x02050f, 20, 80);
+scene.fog = new THREE.Fog(0x02050f, 25, 90);
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
@@ -130,183 +135,227 @@ const pLight = new THREE.PointLight(0x00f2ff, 2, 60);
 pLight.position.set(0,12,0); scene.add(pLight);
 scene.add(new THREE.GridHelper(500, 100, 0x1a2a4a, 0x051020));
 
-// ── 本地玩家 ─────────────────────────────────────────────────
+// ════════════════════════════════════════════
+//  本地玩家狀態
+// ════════════════════════════════════════════
 let userId=null, myIdx=0;
-const myGroup = new THREE.Group(); scene.add(myGroup);
+const myGroup=new THREE.Group(); scene.add(myGroup);
 let myMixer=null, myActions={};
 let mySegments=[], myPath=[], mySegCount=0;
 
-// ── 遠端玩家 ─────────────────────────────────────────────────
-const otherPlayers = {};
+// ════════════════════════════════════════════
+//  遠端玩家 / 食物 / DB 參照
+// ════════════════════════════════════════════
+const otherPlayers={};
+const foodMeshes={};   // docId → THREE.Mesh
+const stealCD={};      // uid → timestamp
 
-// ── 食物 ─────────────────────────────────────────────────────
-const foodMeshes = {};
-let foodCol=null;
-const stealCooldown = {};
+let db=null, foodColRef=null;
 
-// ── Loader / 輸入 ─────────────────────────────────────────────
+// ════════════════════════════════════════════
+//  輸入
+// ════════════════════════════════════════════
 const loader=new GLTFLoader(), keys={};
 let joyActive=false, joyX=0, joyY=0;
-let globalDb=null;
 
-// ── 工具函式 ─────────────────────────────────────────────────
-function safeSetRunning(actions, running) {
+// ════════════════════════════════════════════
+//  工具
+// ════════════════════════════════════════════
+function safeSetRunning(actions, run) {
     if (!actions?.idle || !actions?.run) return;
     try {
-        if (running && !actions.run.isRunning()) { actions.idle.fadeOut(0.2); actions.run.reset().fadeIn(0.2).play(); }
-        else if (!running && actions.run.isRunning()) { actions.run.fadeOut(0.2); actions.idle.reset().fadeIn(0.2).play(); }
+        if (run && !actions.run.isRunning()) { actions.idle.fadeOut(0.2); actions.run.reset().fadeIn(0.2).play(); }
+        else if (!run && actions.run.isRunning()) { actions.run.fadeOut(0.2); actions.idle.reset().fadeIn(0.2).play(); }
     } catch(e){}
 }
 
-async function loadModel(idx, targetGroup) {
-    targetGroup.clear();
+async function loadModel(idx, grp) {
+    grp.clear();
     return new Promise(resolve => {
-        loader.load(`student_${idx}.glb`, (gltf) => {
-            targetGroup.add(gltf.scene);
+        loader.load(`student_${idx}.glb`, gltf => {
+            grp.add(gltf.scene);
             const mixer=new THREE.AnimationMixer(gltf.scene), anims=gltf.animations, actions={};
             if (anims[0]) { actions.idle=mixer.clipAction(anims[0]); actions.idle.play(); }
             if (anims[2]||anims[1]) actions.run=mixer.clipAction(anims[2]||anims[1]);
-            resolve({mixer, actions});
+            resolve({mixer,actions});
         }, undefined, () => {
-            const mesh=new THREE.Mesh(new THREE.BoxGeometry(0.8,1.8,0.8), new THREE.MeshStandardMaterial({color:students[idx].color}));
-            mesh.position.y=0.9; targetGroup.add(mesh);
-            const glow=new THREE.PointLight(students[idx].color, 0.4, 3); glow.position.y=1; targetGroup.add(glow);
-            resolve({mixer:null, actions:{}});
+            const m=new THREE.Mesh(new THREE.BoxGeometry(0.8,1.8,0.8),
+                new THREE.MeshStandardMaterial({color:students[idx].color}));
+            m.position.y=0.9; grp.add(m);
+            const gl=new THREE.PointLight(students[idx].color,0.4,3); gl.position.y=1; grp.add(gl);
+            resolve({mixer:null,actions:{}});
         });
     });
 }
 
-function setSegmentCount(segArray, count, color) {
-    while (segArray.length<count) {
-        const s=new THREE.Mesh(new THREE.SphereGeometry(0.35,8,8), new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:0.35}));
-        scene.add(s); segArray.push(s);
+function setSegCount(segArr, count, color) {
+    while (segArr.length<count) {
+        const s=new THREE.Mesh(new THREE.SphereGeometry(0.35,8,8),
+            new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:0.4}));
+        scene.add(s); segArr.push(s);
     }
-    while (segArray.length>count) scene.remove(segArray.pop());
+    while (segArr.length>count) scene.remove(segArr.pop());
 }
 
-function showEatFlash(msg) {
+let flashTimer=null;
+function showFlash(msg) {
     const el=document.getElementById('eat-flash');
     el.textContent=msg; el.style.opacity=1;
-    setTimeout(()=>el.style.opacity=0, 700);
+    clearTimeout(flashTimer);
+    flashTimer=setTimeout(()=>el.style.opacity=0, 750);
 }
 
-function updateScoreUI() {
+function updateScore() {
     document.getElementById('score-ui').innerHTML=`🐍 長度：${mySegCount+1}`;
 }
 
-// ── 食物系統 ─────────────────────────────────────────────────
-const FOOD_COLORS=[0xff2222,0x22ff44,0xffff22,0xff22ff,0x22ffff,0xff8800,0xffffff,0x00aaff];
-let lastFoodSpawn=0;
+function setStatus(line1, line2='') {
+    document.getElementById('status-ui').innerHTML = line1 + (line2?`<br>${line2}`:'');
+}
 
-function createFoodMesh(docId, x, z) {
+// ════════════════════════════════════════════
+//  食物系統
+// ════════════════════════════════════════════
+function buildFoodMesh(docId, x, z) {
     if (foodMeshes[docId]) return;
-    const color=FOOD_COLORS[Math.floor(Math.abs(x+z)*3)%FOOD_COLORS.length];
-    const mesh=new THREE.Mesh(
-        new THREE.SphereGeometry(0.4,10,10),
-        new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:0.8})
-    );
-    mesh.position.set(x,0.4,z);
-    // 加光暈
-    const light=new THREE.PointLight(color,0.8,4);
+    const color = FOOD_COLORS[Math.floor(Math.random()*FOOD_COLORS.length)];
+    const geo   = new THREE.SphereGeometry(0.42, 12, 12);
+    const mat   = new THREE.MeshStandardMaterial({color, emissive:color, emissiveIntensity:0.85});
+    const mesh  = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 0.42, z);
+    const light = new THREE.PointLight(color, 1.2, 5);
     mesh.add(light);
     scene.add(mesh);
-    foodMeshes[docId]=mesh;
+    foodMeshes[docId] = mesh;
 }
 
-function removeFoodMesh(docId) {
-    if (foodMeshes[docId]) { scene.remove(foodMeshes[docId]); delete foodMeshes[docId]; }
+function eraseFoodMesh(docId) {
+    if (!foodMeshes[docId]) return;
+    scene.remove(foodMeshes[docId]);
+    delete foodMeshes[docId];
 }
 
-async function maybeSpawnFood() {
-    if (!foodCol) return;
-    const now=Date.now();
-    if (now-lastFoodSpawn<3000) return;
-    lastFoodSpawn=now;
+let lastSpawnAttempt = 0;
+async function trySpawnFood() {
+    if (!db || !foodColRef) return;
+    const now = Date.now();
+    if (now - lastSpawnAttempt < 2500) return;
+    lastSpawnAttempt = now;
+
     try {
-        const snap=await getDocs(foodCol);
-        if (snap.size>=FOOD_MAX) return;
-        const n=Math.min(3, FOOD_MAX-snap.size);
-        for (let i=0;i<n;i++) {
-            const x=(Math.random()*2-1)*FIELD_SIZE;
-            const z=(Math.random()*2-1)*FIELD_SIZE;
-            await addDoc(foodCol,{x,z,t:Date.now()});
+        const snap = await getDocs(foodColRef);
+        const have = snap.size;
+        if (have >= FOOD_MAX) return;
+        const need = Math.min(4, FOOD_MAX - have);
+        const writes = [];
+        for (let i=0; i<need; i++) {
+            const x = (Math.random()*2-1)*FIELD_SIZE;
+            const z = (Math.random()*2-1)*FIELD_SIZE;
+            writes.push(addDoc(foodColRef, {x, z, ts:Date.now()}));
         }
-    } catch(e){}
+        await Promise.all(writes);
+        console.log(`[Food] spawned ${need} (total→${have+need})`);
+    } catch(err) {
+        console.error('[Food] spawn error:', err.message);
+        setStatus('多人連線中 ✅','⚠️ 食物寫入失敗：'+err.code);
+    }
 }
 
-// ── 碰撞奪取 ─────────────────────────────────────────────────
-async function tryStealFrom(uid) {
-    if (!globalDb) return;
-    const now=Date.now();
-    if (stealCooldown[uid]&&now-stealCooldown[uid]<2000) return;
-    stealCooldown[uid]=now;
-    const p=otherPlayers[uid];
-    if (!p||p.segCount<=0) return;
-    const steal=Math.min(STEAL_AMOUNT,p.segCount);
-    mySegCount+=steal;
-    setSegmentCount(mySegments, mySegCount, students[myIdx].color);
-    showEatFlash(`⚡ +${steal}`);
-    updateScoreUI();
+async function eatFood(docId) {
+    if (!foodMeshes[docId]) return;      // 已被別人吃掉
+    eraseFoodMesh(docId);
+    mySegCount++;
+    setSegCount(mySegments, mySegCount, students[myIdx].color);
+    updateScore();
+    showFlash('🍎 +1');
+    if (!db) return;
     try {
-        await setDoc(doc(globalDb,'artifacts',APP_ID,'public','data','players',uid),
-            {segCount:Math.max(0,p.segCount-steal)},{merge:true});
-    } catch(e){}
+        // ★ 用 doc(db, fullPath) 確保引用正確
+        await deleteDoc(doc(db,'artifacts',APP_ID,'public','data','food',docId));
+    } catch(e) { console.warn('[Food] delete err:', e.message); }
 }
 
-// ── Firebase 初始化 ───────────────────────────────────────────
+// ════════════════════════════════════════════
+//  碰撞奪取
+// ════════════════════════════════════════════
+async function trySteal(uid) {
+    const now=Date.now();
+    if (stealCD[uid]&&now-stealCD[uid]<2000) return;
+    stealCD[uid]=now;
+    const p=otherPlayers[uid];
+    if (!p||p.segCount<=0||!db) return;
+    const n=Math.min(STEAL_AMOUNT, p.segCount);
+    mySegCount+=n;
+    setSegCount(mySegments, mySegCount, students[myIdx].color);
+    showFlash(`⚡ +${n}`);
+    updateScore();
+    try {
+        await setDoc(doc(db,'artifacts',APP_ID,'public','data','players',uid),
+            {segCount:Math.max(0,p.segCount-n)},{merge:true});
+    } catch(e){ console.warn('[Steal] err:',e.message); }
+}
+
+// ════════════════════════════════════════════
+//  Firebase 啟動
+// ════════════════════════════════════════════
 async function initFirebase() {
     try {
-        const fbApp=initializeApp(firebaseConfig);
-        const auth=getAuth(fbApp);
-        const db=getFirestore(fbApp);
-        globalDb=db;
+        const app  = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        db = getFirestore(app);
 
+        setStatus('🔄 正在驗證身分...');
         await signInAnonymously(auth);
 
-        onAuthStateChanged(auth, user=>{
+        onAuthStateChanged(auth, user => {
             if (!user) return;
-            userId=user.uid;
-            document.getElementById('status-ui').innerText='多人連線中 ✅ | WASD / 搖桿 移動';
+            userId = user.uid;
+            setStatus('多人連線中 ✅', 'WASD / 搖桿 移動');
 
-            foodCol=collection(db,'artifacts',APP_ID,'public','data','food');
+            // 集合引用
+            foodColRef = collection(db,'artifacts',APP_ID,'public','data','food');
+            const playersCol = collection(db,'artifacts',APP_ID,'public','data','players');
 
-            // 食物監聽
-            onSnapshot(foodCol, snap=>{
-                const ids=snap.docs.map(d=>d.id);
-                Object.keys(foodMeshes).forEach(id=>{ if (!ids.includes(id)) removeFoodMesh(id); });
-                snap.forEach(d=>createFoodMesh(d.id, d.data().x, d.data().z));
+            // ── 食物監聽 ──
+            onSnapshot(foodColRef, snap => {
+                const live = new Set(snap.docs.map(d=>d.id));
+                // 移除已不存在的食物 Mesh
+                Object.keys(foodMeshes).forEach(id => { if (!live.has(id)) eraseFoodMesh(id); });
+                // 建立新食物 Mesh
+                snap.forEach(d => buildFoodMesh(d.id, d.data().x, d.data().z));
+                setStatus('多人連線中 ✅', `WASD / 搖桿 移動　🍎 場上食物：${snap.size}`);
+            }, err => {
+                console.error('[Firestore food]', err);
+                setStatus('多人連線中 ✅', '⚠️ 食物監聽失敗：'+err.code);
             });
 
-            // 玩家監聽
-            const playersCol=collection(db,'artifacts',APP_ID,'public','data','players');
-            onSnapshot(playersCol, snap=>{
-                const onlineIdxs=[];
-                snap.forEach(async docSnap=>{
-                    const data=docSnap.data();
-                    onlineIdxs.push(data.idx);
-                    if (docSnap.id===userId) {
-                        // 被偷走節段的同步
-                        if (typeof data.segCount==='number'&&data.segCount<mySegCount) {
+            // ── 玩家監聽 ──
+            onSnapshot(playersCol, snap => {
+                const liveIds = new Set(snap.docs.map(d=>d.id));
+                snap.forEach(async dSnap => {
+                    const data=dSnap.data(), uid=dSnap.id;
+                    if (uid===userId) {
+                        // 被偷同步
+                        if (typeof data.segCount==='number' && data.segCount<mySegCount) {
                             const lost=mySegCount-data.segCount;
                             mySegCount=data.segCount;
-                            setSegmentCount(mySegments,mySegCount,students[myIdx].color);
-                            showEatFlash(`💀 -${lost}`);
-                            updateScoreUI();
+                            setSegCount(mySegments,mySegCount,students[myIdx].color);
+                            showFlash(`💀 -${lost}`);
+                            updateScore();
                         }
                         return;
                     }
-                    handleRemotePlayer(docSnap.id, data);
+                    handleRemote(uid, data);
                 });
-                const currIds=snap.docs.map(d=>d.id);
-                Object.keys(otherPlayers).forEach(uid=>{ if (!currIds.includes(uid)) removePlayer(uid); });
-                updateOnlineUI(onlineIdxs);
-            });
+                Object.keys(otherPlayers).forEach(uid=>{ if (!liveIds.has(uid)) removeRemote(uid); });
+                updateCardUI(snap.docs.map(d=>d.data().idx));
+            }, err => console.error('[Firestore players]', err));
 
-            // 上傳自身位置
+            // ── 位置上傳 ──
             setInterval(async()=>{
-                if (!userId) return;
+                if (!userId||!db) return;
                 try {
-                    await setDoc(doc(db,'artifacts',APP_ID,'public','data','players',userId),{
+                    await setDoc(doc(db,'artifacts',APP_ID,'public','data','players',userId), {
                         x:myGroup.position.x, z:myGroup.position.z,
                         rot:myGroup.rotation.y, idx:myIdx,
                         segCount:mySegCount,
@@ -314,45 +363,49 @@ async function initFirebase() {
                         lastSeen:Date.now()
                     },{merge:true});
                 } catch(e){}
-            },100);
+            }, 100);
 
-            // 定時生成食物
-            setInterval(maybeSpawnFood,2000);
-            setTimeout(maybeSpawnFood,800);
+            // ── 食物定時補充 ──
+            trySpawnFood();
+            setInterval(trySpawnFood, 2500);
         });
-    } catch(e) {
-        console.error('Firebase 失敗:',e);
-        document.getElementById('status-ui').innerText='⚠️ 單機模式';
+
+    } catch(err) {
+        console.error('[Firebase]', err);
+        setStatus('⚠️ 連線失敗', err.message);
     }
 }
 
-async function handleRemotePlayer(uid, data) {
+// ════════════════════════════════════════════
+//  遠端玩家管理
+// ════════════════════════════════════════════
+async function handleRemote(uid, data) {
     if (!otherPlayers[uid]) {
-        const group=new THREE.Group(); scene.add(group);
-        otherPlayers[uid]={group,segments:[],path:[],idx:-1,segCount:0};
+        const grp=new THREE.Group(); scene.add(grp);
+        otherPlayers[uid]={grp,segments:[],path:[],idx:-1,segCount:0};
     }
     const p=otherPlayers[uid];
-    p.targetPos=new THREE.Vector3(data.x,0,data.z);
-    p.targetRot=data.rot;
-    p.remoteMoving=data.isMoving;
-    p.segCount=data.segCount??0;
+    p.targetPos = new THREE.Vector3(data.x,0,data.z);
+    p.targetRot = data.rot;
+    p.remoteMoving = data.isMoving;
+    p.segCount = data.segCount??0;
     if (p.idx!==data.idx) {
         p.idx=data.idx;
-        const res=await loadModel(p.idx,p.group);
-        p.mixer=res.mixer; p.actions=res.actions;
+        const r=await loadModel(p.idx,p.grp); p.mixer=r.mixer; p.actions=r.actions;
     }
-    setSegmentCount(p.segments,p.segCount,students[data.idx]?.color??0xffffff);
+    setSegCount(p.segments, p.segCount, students[data.idx]?.color??0xffffff);
 }
 
-function removePlayer(uid) {
-    if (otherPlayers[uid]) {
-        scene.remove(otherPlayers[uid].group);
-        otherPlayers[uid].segments.forEach(s=>scene.remove(s));
-        delete otherPlayers[uid];
-    }
+function removeRemote(uid) {
+    if (!otherPlayers[uid]) return;
+    scene.remove(otherPlayers[uid].grp);
+    otherPlayers[uid].segments.forEach(s=>scene.remove(s));
+    delete otherPlayers[uid];
 }
 
-// ── 搖桿 ─────────────────────────────────────────────────────
+// ════════════════════════════════════════════
+//  搖桿
+// ════════════════════════════════════════════
 const knob=document.getElementById('joystick-knob');
 addEventListener('touchstart',e=>{
     const t=e.touches[0];
@@ -361,120 +414,121 @@ addEventListener('touchstart',e=>{
 addEventListener('touchmove',e=>{
     if (!joyActive) return;
     const t=e.touches[0];
-    const rect=document.getElementById('joystick-base').getBoundingClientRect();
-    joyX=(t.clientX-rect.left-rect.width/2)/60;
-    joyY=(t.clientY-rect.top-rect.height/2)/60;
-    const d=Math.hypot(joyX,joyY);
-    if (d>1){joyX/=d;joyY/=d;}
+    const r=document.getElementById('joystick-base').getBoundingClientRect();
+    joyX=(t.clientX-r.left-r.width/2)/60;
+    joyY=(t.clientY-r.top-r.height/2)/60;
+    const d=Math.hypot(joyX,joyY); if(d>1){joyX/=d;joyY/=d;}
     knob.style.transform=`translate(${joyX*35}px,${joyY*35}px)`;
 });
 addEventListener('touchend',()=>{joyActive=false;joyX=joyY=0;knob.style.transform='translate(0,0)';});
 
-// ── 主迴圈 ───────────────────────────────────────────────────
+// ════════════════════════════════════════════
+//  主動畫迴圈
+// ════════════════════════════════════════════
 const clock=new THREE.Clock();
 let foodBob=0;
 
 function animate() {
     requestAnimationFrame(animate);
-    const delta=clock.getDelta();
-    foodBob+=delta*2;
+    const dt=clock.getDelta();
+    foodBob+=dt*2;
 
-    // 移動
-    let speed=0;
-    if (keys['w']||keys['arrowup'])    speed= MOVE_SPEED;
-    if (keys['s']||keys['arrowdown'])  speed=-MOVE_SPEED;
+    // ── 本地移動 ──
+    let spd=0;
+    if (keys['w']||keys['arrowup'])    spd= MOVE_SPEED;
+    if (keys['s']||keys['arrowdown'])  spd=-MOVE_SPEED;
     if (keys['a']||keys['arrowleft'])  myGroup.rotation.y+=TURN_SPEED;
     if (keys['d']||keys['arrowright']) myGroup.rotation.y-=TURN_SPEED;
     if (joyActive) {
         const d=Math.hypot(joyX,joyY);
-        if (d>0.1){myGroup.rotation.y=Math.atan2(-joyX,-joyY);speed=MOVE_SPEED*d;}
+        if (d>0.1){myGroup.rotation.y=Math.atan2(-joyX,-joyY);spd=MOVE_SPEED*d;}
     }
 
-    const isMoving=speed!==0;
-    if (isMoving) myGroup.translateZ(speed);
-    keys.isMoving=isMoving;
+    const moving=spd!==0;
+    if (moving) myGroup.translateZ(spd);
+    keys.isMoving=moving;
+    if (myMixer){myMixer.update(dt);safeSetRunning(myActions,moving);}
 
-    if (myMixer){myMixer.update(delta);safeSetRunning(myActions,isMoving);}
-
-    // 路徑記錄
+    // ── 路徑記錄 & 身體跟隨 ──
     myPath.unshift({pos:myGroup.position.clone()});
-    if (myPath.length>400) myPath.pop();
+    if (myPath.length>500) myPath.pop();
     mySegments.forEach((s,i)=>{
         const step=(i+1)*SEG_SPACING;
-        if (myPath[step]) s.position.lerp(myPath[step].pos,0.4);
+        if (myPath[step]) s.position.lerp(myPath[step].pos, 0.4);
     });
 
-    // 食物動畫 + 碰撞
-    const myPos=myGroup.position;
-    Object.entries(foodMeshes).forEach(([docId,mesh])=>{
-        mesh.position.y=0.4+Math.sin(foodBob+docId.charCodeAt(0)*0.7)*0.18;
-        mesh.rotation.y+=delta*1.2;
-        if (myPos.distanceTo(mesh.position)<FOOD_EAT_DIST) {
-            removeFoodMesh(docId);
-            mySegCount++;
-            setSegmentCount(mySegments,mySegCount,students[myIdx].color);
-            updateScoreUI();
-            showEatFlash('🍎 +1');
-            if (foodCol) deleteDoc(doc(foodCol,docId)).catch(()=>{});
+    // ── 食物動畫 + 吃食物判定 ──
+    const hp=myGroup.position;
+    Object.entries(foodMeshes).forEach(([id,mesh])=>{
+        // 浮動動畫
+        mesh.position.y = 0.42 + Math.sin(foodBob + id.charCodeAt(0)*0.5)*0.2;
+        mesh.rotation.y += dt*1.5;
+        // 吃到了？
+        if (hp.distanceTo(mesh.position) < FOOD_EAT_DIST) {
+            eatFood(id); // async，但 mesh 先消除不影響
         }
     });
 
-    // 玩家碰撞
+    // ── 碰撞奪取判定（頭碰對方身體）──
     for (const [uid,p] of Object.entries(otherPlayers)) {
         for (const seg of p.segments) {
-            if (myPos.distanceTo(seg.position)<STEAL_DIST) {
-                tryStealFrom(uid); break;
+            if (hp.distanceTo(seg.position) < STEAL_DIST) {
+                trySteal(uid); break;
             }
         }
     }
 
-    // 遠端玩家更新
+    // ── 遠端玩家更新 ──
     for (const [,p] of Object.entries(otherPlayers)) {
-        if (p.targetPos) p.group.position.lerp(p.targetPos,0.2);
+        if (p.targetPos) p.grp.position.lerp(p.targetPos,0.2);
         if (p.targetRot!==undefined)
-            p.group.rotation.y=THREE.MathUtils.lerp(p.group.rotation.y,p.targetRot,0.2);
-        if (p.mixer){p.mixer.update(delta);safeSetRunning(p.actions,p.remoteMoving);}
-        p.path.unshift({pos:p.group.position.clone()});
-        if (p.path.length>400) p.path.pop();
+            p.grp.rotation.y=THREE.MathUtils.lerp(p.grp.rotation.y,p.targetRot,0.2);
+        if (p.mixer){p.mixer.update(dt);safeSetRunning(p.actions,p.remoteMoving);}
+        p.path.unshift({pos:p.grp.position.clone()});
+        if (p.path.length>500) p.path.pop();
         p.segments.forEach((s,i)=>{
             const step=(i+1)*SEG_SPACING;
             if (p.path[step]) s.position.lerp(p.path[step].pos,0.4);
         });
     }
 
-    // 攝影機
-    const idealCam=new THREE.Vector3(0,6,-14).applyMatrix4(myGroup.matrixWorld);
-    camera.position.lerp(idealCam,0.1);
+    // ── 攝影機 ──
+    const ic=new THREE.Vector3(0,6,-14).applyMatrix4(myGroup.matrixWorld);
+    camera.position.lerp(ic,0.1);
     camera.lookAt(myGroup.position.x,1,myGroup.position.z);
     renderer.render(scene,camera);
 }
 
-// ── UI ───────────────────────────────────────────────────────
+// ════════════════════════════════════════════
+//  UI
+// ════════════════════════════════════════════
 function initUI() {
     const grid=document.getElementById('selection-grid');
     students.forEach((s,i)=>{
         const card=document.createElement('div');
         card.className='character-card'; card.id=`card-${i}`;
         const hex=new THREE.Color(s.color).getHexString();
-        card.innerHTML=`<div class="character-icon" style="background-color:#${hex};background-image:url('icon_${i}.jpg')"></div><div class="character-name">${s.name}</div>`;
-        card.onclick=()=>switchCharacter(i);
+        card.innerHTML=`
+            <div class="character-icon" style="background-color:#${hex};background-image:url('icon_${i}.jpg')"></div>
+            <div class="character-name">${s.name}</div>`;
+        card.onclick=()=>switchChar(i);
         grid.appendChild(card);
     });
 }
 
-function updateOnlineUI(onlineIdxs) {
-    document.querySelectorAll('.character-card').forEach((card,i)=>{
-        card.classList.toggle('online',onlineIdxs.includes(i)&&i!==myIdx);
-        card.classList.toggle('active',i===myIdx);
+function updateCardUI(onlineIdxs) {
+    document.querySelectorAll('.character-card').forEach((c,i)=>{
+        c.classList.toggle('online',onlineIdxs.includes(i)&&i!==myIdx);
+        c.classList.toggle('active',i===myIdx);
     });
 }
 
-async function switchCharacter(idx) {
+async function switchChar(idx) {
     myIdx=idx;
     document.querySelectorAll('.character-card').forEach((c,i)=>c.classList.toggle('active',i===idx));
-    setSegmentCount(mySegments,mySegCount,students[idx].color);
-    const res=await loadModel(idx,myGroup);
-    myMixer=res.mixer; myActions=res.actions;
+    setSegCount(mySegments,mySegCount,students[idx].color);
+    const r=await loadModel(idx,myGroup);
+    myMixer=r.mixer; myActions=r.actions;
 }
 
 addEventListener('keydown',e=>{ keys[e.key.toLowerCase()]=true; });
@@ -485,9 +539,11 @@ addEventListener('resize', ()=>{
     renderer.setSize(innerWidth,innerHeight);
 });
 
-// ── 啟動 ─────────────────────────────────────────────────────
+// ════════════════════════════════════════════
+//  啟動
+// ════════════════════════════════════════════
 initUI();
-switchCharacter(0);
+switchChar(0);
 initFirebase();
 animate();
 </script>
