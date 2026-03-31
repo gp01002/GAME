@@ -69,9 +69,9 @@ const CONFIG = {
     CHAR_IDLE_IDX:   0,      // GLB 待機動畫 index
     CHAR_RUN_IDX:    1,      // GLB 跑步動畫 index
     SEG_SCALE:       0.45,   // 蛇身球大小
-    FOOD_COUNT:      1,      // food GLB 數量（FOOD_USE_GLB=false 時不影響）
-    FOOD_USE_GLB:    false,  // false = 發光球（不需上傳任何食物檔案）✅
-    FOOD_GLB_SCALE:  0.6,    // 食物模型縮放（GLB 模式才有效）
+    FOOD_COUNT:      1,      // ★ 目前用 food.glb（之後改成 6 就會讀 food_0.glb～food_5.glb）
+    FOOD_USE_GLB:    true,   // ★ 已開啟 3D GLB 食物 ✅
+    FOOD_GLB_SCALE:  0.6,    // 食物模型縮放（太大/太小調這裡）
     FOOD_MAX:        15,
     FOOD_EAT_DIST:   2.0,
     STEAL_DIST:      1.4,
