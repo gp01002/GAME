@@ -5,34 +5,72 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>3D 多人貪食蛇</title>
     <style>
-        body { margin:0; overflow:hidden; background:#02050f; font-family:"Microsoft JhengHei",sans-serif; touch-action:none; }
-        #game-container { position:absolute; top:0; left:0; width:100%; height:100%; }
-        #overlay {
-            position:absolute; bottom:0; left:0; width:100%;
-            background:rgba(5,10,26,0.85); padding:5px 0;
-            display:flex; flex-direction:column; align-items:center;
-            backdrop-filter:blur(10px); z-index:100;
-            border-top:1px solid rgba(0,242,255,0.2);
+        *{box-sizing:border-box;}
+        body{margin:0;overflow:hidden;background:#02050f;font-family:"Microsoft JhengHei",sans-serif;touch-action:none;}
+        #game-container{position:absolute;top:0;left:0;width:100%;height:100%;}
+
+        /* ── 底部角色列（手機可橫向滑動）── */
+        #overlay{
+            position:absolute;bottom:0;left:0;width:100%;
+            background:rgba(5,10,26,0.88);padding:4px 0;
+            backdrop-filter:blur(10px);z-index:100;
+            border-top:1px solid rgba(0,242,255,0.25);
         }
-        #selection-grid { display:grid; grid-template-columns:repeat(20,1fr); gap:2px; width:98%; max-width:1200px; }
-        .character-card {
-            background:rgba(255,255,255,0.03); border:1px solid #1a2a4a;
-            cursor:pointer; padding:1px; position:relative; transition:transform 0.2s; text-align:center;
+        #selection-grid{
+            display:flex;flex-direction:row;
+            overflow-x:auto;overflow-y:hidden;
+            width:100%;padding:0 4px;gap:3px;
+            -webkit-overflow-scrolling:touch;
+            scrollbar-width:none;
         }
-        .character-card.active  { border-color:#00f2ff; background:rgba(0,242,255,0.2); transform:scale(1.1); }
-        .character-card.online::after {
-            content:""; position:absolute; top:2px; right:2px;
-            width:6px; height:6px; background:#00ff00; border-radius:50%; box-shadow:0 0 5px #00ff00;
+        #selection-grid::-webkit-scrollbar{display:none;}
+        .character-card{
+            flex:0 0 52px;height:60px;
+            background:rgba(255,255,255,0.04);border:1px solid #1a2a4a;
+            cursor:pointer;padding:1px;position:relative;
+            transition:transform 0.2s;text-align:center;border-radius:4px;
         }
-        .character-icon { width:100%; aspect-ratio:1/1; background-size:cover; background-position:center; background-color:#111; }
-        .character-name { font-size:7px; color:#aaa; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transform:scale(0.85); }
-        #joystick-zone { position:fixed; bottom:80px; left:30px; width:120px; height:120px; z-index:200; display:none; }
-        #joystick-base { width:100%; height:100%; background:rgba(255,255,255,0.1); border-radius:50%; border:2px solid rgba(255,255,255,0.2); position:relative; }
-        #joystick-knob { position:absolute; top:35px; left:35px; width:50px; height:50px; background:rgba(0,242,255,0.6); border-radius:50%; box-shadow:0 0 15px rgba(0,242,255,0.5); }
-        #status-ui { position:fixed; top:15px; left:15px; color:#00f2ff; background:rgba(5,10,26,0.7); padding:5px 12px; font-size:11px; border-left:2px solid #00f2ff; pointer-events:none; z-index:150; line-height:1.8; }
-        #score-ui { position:fixed; top:15px; right:15px; color:#ffee44; background:rgba(5,10,26,0.7); padding:5px 14px; font-size:14px; border-right:2px solid #ffee44; pointer-events:none; z-index:150; text-align:right; line-height:2; }
-        #eat-flash { position:fixed; top:42%; left:50%; transform:translate(-50%,-50%); font-size:32px; font-weight:bold; color:#fff; pointer-events:none; z-index:300; opacity:0; transition:opacity 0.15s; text-shadow:0 0 20px #0ff; }
-        @media (pointer:coarse) { #joystick-zone { display:block; } }
+        .character-card.active{border-color:#00f2ff;background:rgba(0,242,255,0.2);transform:scale(1.1);}
+        .character-card.online::after{
+            content:"";position:absolute;top:2px;right:2px;
+            width:7px;height:7px;background:#00ff00;border-radius:50%;box-shadow:0 0 6px #00ff00;
+        }
+        .character-icon{width:100%;aspect-ratio:1/1;background-size:cover;background-position:center;background-color:#111;border-radius:3px;}
+        .character-name{font-size:7px;color:#aaa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+
+        /* ── 左搖桿 ── */
+        #joystick-zone{position:fixed;bottom:80px;left:20px;width:110px;height:110px;z-index:200;display:none;}
+        #joystick-base{width:100%;height:100%;background:rgba(255,255,255,0.08);border-radius:50%;border:2px solid rgba(255,255,255,0.2);position:relative;}
+        #joystick-knob{position:absolute;top:32px;left:32px;width:46px;height:46px;background:rgba(0,242,255,0.55);border-radius:50%;box-shadow:0 0 14px rgba(0,242,255,0.5);}
+
+        /* ── 發射鈕（手機右下）── */
+        #shoot-btn{
+            position:fixed;bottom:90px;right:20px;
+            width:70px;height:70px;border-radius:50%;
+            background:rgba(255,80,80,0.8);border:3px solid #ff4444;
+            color:#fff;font-size:22px;font-weight:bold;
+            display:none;align-items:center;justify-content:center;
+            z-index:200;cursor:pointer;
+            box-shadow:0 0 20px rgba(255,80,80,0.6);
+            user-select:none;-webkit-user-select:none;
+        }
+        #shoot-btn:active{transform:scale(0.92);background:rgba(255,120,120,0.9);}
+
+        /* ── 狀態 / 分數 ── */
+        #status-ui{position:fixed;top:15px;left:15px;color:#00f2ff;background:rgba(5,10,26,0.7);padding:5px 12px;font-size:11px;border-left:2px solid #00f2ff;pointer-events:none;z-index:150;line-height:1.8;}
+        #score-ui{position:fixed;top:15px;right:15px;color:#ffee44;background:rgba(5,10,26,0.7);padding:5px 14px;font-size:14px;border-right:2px solid #ffee44;pointer-events:none;z-index:150;text-align:right;line-height:2;}
+
+        /* ── 閃光提示 ── */
+        #eat-flash{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);font-size:34px;font-weight:bold;color:#fff;pointer-events:none;z-index:300;opacity:0;transition:opacity 0.15s;text-shadow:0 0 24px #0ff;}
+
+        /* ── 操作提示（電腦）── */
+        #hint-ui{position:fixed;bottom:75px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.4);font-size:10px;pointer-events:none;z-index:150;white-space:nowrap;}
+
+        @media (pointer:coarse){
+            #joystick-zone{display:block;}
+            #shoot-btn{display:flex;}
+            #hint-ui{display:none;}
+        }
     </style>
 </head>
 <body>
@@ -40,7 +78,11 @@
 <div id="status-ui">🔄 正在連線...</div>
 <div id="score-ui">🐍 長度：1</div>
 <div id="eat-flash"></div>
+<div id="hint-ui">WASD 移動 ｜ 空白鍵 發射 ｜ 拖曳 旋轉視角</div>
+
 <div id="joystick-zone"><div id="joystick-base"><div id="joystick-knob"></div></div></div>
+<div id="shoot-btn">🔥</div>
+
 <div id="overlay"><div id="selection-grid"></div></div>
 
 <script type="importmap">
@@ -51,40 +93,40 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { initializeApp }             from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-import { getFirestore, doc, setDoc, deleteDoc, getDoc, onSnapshot, collection, getDocs, addDoc, serverTimestamp, query, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+import { getFirestore, doc, setDoc, deleteDoc, getDoc, onSnapshot, collection, getDocs, addDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
-// ╔══════════════════════════════════════════════════════════╗
-// ║                    資源設定區                            ║
-// ╠══════════════════════════════════════════════════════════╣
-// ║  角色：student_0.glb ～ student_19.glb                  ║
-// ║  頭像：icon_0.jpg    ～ icon_19.jpg                     ║
-// ║  食物：food_0.glb ～ food_{FOOD_COUNT-1}.glb            ║
-// ║        （只有一個時命名 food.glb，FOOD_COUNT 設 1）      ║
-// ║  天空：任意 JPG 檔名填入 SKY_IMG                        ║
-// ╚══════════════════════════════════════════════════════════╝
+// ╔══════════════════════════════════════════╗
+// ║            資源設定區                    ║
+// ╚══════════════════════════════════════════╝
 const CONFIG = {
-    CHAR_SCALE:     3.5,    // 角色大小
-    CHAR_IDLE_IDX:  0,      // 待機動畫 index
-    CHAR_RUN_IDX:   1,      // 跑步動畫 index
-    CHAR_MODEL_ROTATE: -Math.PI * 0.5, // -90度
-    SEG_SCALE:      0.6,    // 蛇身球大小
+    CHAR_SCALE:          3.5,
+    CHAR_IDLE_IDX:       0,
+    CHAR_RUN_IDX:        1,
+    CHAR_MODEL_ROTATE:  -Math.PI * 0.5,
+    SEG_SCALE:           0.6,
 
-    FOOD_COUNT:     4,      // food_0.glb ～ food_3.glb（改 1 則讀 food.glb）
-    FOOD_USE_GLB:   true,   // true = 3D 食物模型；false = 發光球
-    FOOD_GLB_SCALE: 1.8,    // 食物模型大小
-    FOOD_MAX:       15,     // 場上最多食物數
-    FOOD_EAT_DIST:  2.5,    // 吃到食物距離
+    FOOD_COUNT:          4,       // food_0.glb ~ food_3.glb
+    FOOD_USE_GLB:        true,
+    FOOD_GLB_SCALE:      1.8,
+    FOOD_MAX:            15,
+    FOOD_EAT_DIST:       2.5,
 
-    STEAL_DIST:     1.6,    // 碰撞奪取距離
-    STEAL_AMOUNT:   3,      // 每次奪取節段數
-    SEG_SPACING:    10,     // 蛇身間距
-    MOVE_SPEED:     0.18,
-    TURN_SPEED:     0.055,
-    FIELD_SIZE:     38,     // 食物生成範圍
-    SKY_IMG:        'sky.jpg', // 天空背景（空字串 = 預設星空）
+    STEAL_DIST:          1.6,
+    STEAL_AMOUNT:        3,
+    SEG_SPACING:         10,
+    MOVE_SPEED:          0.18,
+    TURN_SPEED:          0.055,
+    FIELD_SIZE:          38,
+    SKY_IMG:             'sky.jpg',
+
+    // 發射
+    BULLET_SPEED:        0.55,    // 子彈速度
+    BULLET_LIFETIME:     2.5,     // 子彈存活秒數
+    BULLET_HIT_DIST:     2.2,     // 命中距離
+    SHOOT_COOLDOWN:      800,     // 發射冷卻 ms（需要有食物才能發射）
 };
 
-// ── Firebase ─────────────────────────────────────────────────
+// Firebase
 const firebaseConfig = {
     apiKey:"AIzaSyB2rWVtiPF7FUBNztORts6X6lS2MGLUqvE",
     authDomain:"game-ee5db.firebaseapp.com",
@@ -95,7 +137,6 @@ const firebaseConfig = {
 };
 const APP_ID = 'snake-multi';
 
-// ── 角色定義 ─────────────────────────────────────────────────
 const students = [
     {name:"高安妤",color:0xff4444},{name:"饒允志",color:0x44ffff},
     {name:"朱采曼",color:0x4444ff},{name:"林宸慈",color:0x44ff44},
@@ -110,7 +151,7 @@ const students = [
 ];
 const FOOD_COLORS=[0xff3333,0x33ff66,0xffff33,0xff33ff,0x33ffff,0xff8800,0xffffff,0x00aaff,0xff6699];
 
-// ── Three.js ─────────────────────────────────────────────────
+// ── Three.js ──────────────────────────────
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
@@ -120,100 +161,91 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
 document.getElementById('game-container').appendChild(renderer.domElement);
 
-// ── 場景 ─────────────────────────────────────────────────────
+// ── 場景 ─────────────────────────────────
 function buildScene() {
     scene.background = new THREE.Color(0x02050f);
     scene.fog = new THREE.FogExp2(0x02050f, 0.012);
-
-    // 星星
-    const sp=[], sg=new THREE.BufferGeometry();
+    const sp=[],sg=new THREE.BufferGeometry();
     for(let i=0;i<3000;i++) sp.push((Math.random()-.5)*400,Math.random()*80+5,(Math.random()-.5)*400);
     sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
     scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:0.18,transparent:true,opacity:0.7})));
-
-    // 地板
     const grid=new THREE.GridHelper(500,100,0x1a3a6a,0x0a1a3a); grid.position.y=0.01; scene.add(grid);
     const floor=new THREE.Mesh(new THREE.PlaneGeometry(500,500),new THREE.MeshStandardMaterial({color:0x050e22,metalness:0.3,roughness:0.8,transparent:true,opacity:0.9}));
     floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
-
-    // 燈光
     scene.add(new THREE.AmbientLight(0xffffff,2.5));
     const sun=new THREE.DirectionalLight(0xffffff,3.0); sun.position.set(20,40,20); sun.castShadow=true; scene.add(sun);
-    const rl1=new THREE.PointLight(0x88ddff,4,120); rl1.position.set(0,20,0); scene.add(rl1);
-    const rl2=new THREE.PointLight(0xffccaa,2,80); rl2.position.set(-30,10,30); scene.add(rl2);
-    const rl3=new THREE.PointLight(0xaaffcc,2,80); rl3.position.set(30,10,-30); scene.add(rl3);
-
-    // 場地邊界光柱
+    scene.add(Object.assign(new THREE.PointLight(0x88ddff,4,120),{position:{x:0,y:20,z:0}}));
+    scene.add(Object.assign(new THREE.PointLight(0xffccaa,2,80),{position:{x:-30,y:10,z:30}}));
+    scene.add(Object.assign(new THREE.PointLight(0xaaffcc,2,80),{position:{x:30,y:10,z:-30}}));
     const pm=new THREE.MeshStandardMaterial({color:0x00f2ff,emissive:0x00f2ff,emissiveIntensity:0.8,transparent:true,opacity:0.4});
-    [[-CONFIG.FIELD_SIZE,-1,CONFIG.FIELD_SIZE],[CONFIG.FIELD_SIZE,-1,CONFIG.FIELD_SIZE],
-     [CONFIG.FIELD_SIZE,-1,-CONFIG.FIELD_SIZE],[-CONFIG.FIELD_SIZE,-1,-CONFIG.FIELD_SIZE]].forEach(([x,y,z])=>{
-        const p=new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.15,6,8),pm);
-        p.position.set(x,y+3,z); scene.add(p);
-        const pl=new THREE.PointLight(0x00f2ff,1.5,12); pl.position.set(x,y+6,z); scene.add(pl);
+    [[-CONFIG.FIELD_SIZE,CONFIG.FIELD_SIZE],[CONFIG.FIELD_SIZE,CONFIG.FIELD_SIZE],[CONFIG.FIELD_SIZE,-CONFIG.FIELD_SIZE],[-CONFIG.FIELD_SIZE,-CONFIG.FIELD_SIZE]].forEach(([x,z])=>{
+        const p=new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.15,6,8),pm); p.position.set(x,2,z); scene.add(p);
+        const pl=new THREE.PointLight(0x00f2ff,1.5,12); pl.position.set(x,6,z); scene.add(pl);
     });
-
-    // 天空 JPG
-    if (CONFIG.SKY_IMG) {
-        new THREE.TextureLoader().load(CONFIG.SKY_IMG, tex=>{
-            tex.mapping=THREE.EquirectangularReflectionMapping;
-            scene.background=tex;
-        });
-    }
+    if(CONFIG.SKY_IMG) new THREE.TextureLoader().load(CONFIG.SKY_IMG,tex=>{tex.mapping=THREE.EquirectangularReflectionMapping;scene.background=tex;});
 }
 buildScene();
 
-// ── 玩家狀態 ─────────────────────────────────────────────────
+// ── 玩家 ─────────────────────────────────
 let userId=null, myIdx=0;
-const myGroup=new THREE.Group();
-scene.add(myGroup);
+const myGroup=new THREE.Group(); scene.add(myGroup);
 let myMixer=null, myActions={};
-let mySegments=[], myPath=[], mySegCount=0;
 
-// ── 上次上傳的位置（只有移動才寫入）─────────────────────────
-let lastUploadPos = new THREE.Vector3(9999,0,9999);
-let lastUploadRot = 0;
-let lastUploadSeg = 0;
-let lastUploadTime = 0;
-const UPLOAD_MOVE_THRESHOLD = 0.3; // 移動超過這個距離才上傳
-const UPLOAD_FORCE_INTERVAL = 5000; // 最多 5 秒強制上傳一次（保持在線狀態）
+// ── 食物尾巴（真正的 GLB 模型跟隨）─────────
+// 每個節段儲存 { mesh: Group, foodType: number }
+let myTail=[];   // 本地尾巴
+let myPath=[];
 
-// ── 其他玩家 / 食物 ───────────────────────────────────────────
+// ── 攝影機旋轉（可用滑鼠拖曳或觸控旋轉）──
+let camAngle = 0;        // 水平旋轉角
+let camPitch = 0.35;     // 垂直俯角（弧度）
+const CAM_DIST  = 16;
+const CAM_H     = 7;
+
+// ── 發射物列表 ───────────────────────────
+// { mesh, dir, life, light }
+const bullets = [];
+let lastShootTime = 0;
+
+// ── 其他玩家 / 食物 ───────────────────────
 const otherPlayers={}, foodMeshes={}, stealCD={};
 let db=null, foodColRef=null, playersColRef=null;
-
-// ── 食物 GLB 快取 ─────────────────────────────────────────────
 const foodGLBCache={};
-
-// ── Loader / 輸入 ─────────────────────────────────────────────
 const loader=new GLTFLoader(), keys={};
 let joyActive=false, joyX=0, joyY=0;
 
-// ── 工具 ─────────────────────────────────────────────────────
-function safeSetRunning(actions,run) {
+// ── 拖曳視角 ─────────────────────────────
+let dragActive=false, dragLastX=0, dragLastY=0;
+let touchIds={cam:-1, joy:-1};
+
+// ── 智慧上傳 ─────────────────────────────
+let lastUploadPos=new THREE.Vector3(9999,0,9999), lastUploadRot=0, lastUploadSeg=0, lastUploadTime=0;
+const UPLOAD_THRESHOLD=0.3, UPLOAD_FORCE=5000;
+
+// ── 工具 ─────────────────────────────────
+function safeSetRunning(actions,run){
     if(!actions?.idle||!actions?.run) return;
-    try {
+    try{
         if(run&&!actions.run.isRunning()){actions.idle.fadeOut(0.2);actions.run.reset().fadeIn(0.2).play();}
         else if(!run&&actions.run.isRunning()){actions.run.fadeOut(0.2);actions.idle.reset().fadeIn(0.2).play();}
     }catch(e){}
 }
 
-async function loadModel(idx,grp) {
+async function loadModel(idx,grp){
     grp.clear();
     return new Promise(resolve=>{
-        loader.load(`student_${idx}.glb`, gltf=>{
+        loader.load(`student_${idx}.glb`,gltf=>{
             const model=gltf.scene;
             model.scale.setScalar(CONFIG.CHAR_SCALE);
-            model.rotation.y = CONFIG.CHAR_MODEL_ROTATE; // ★ 模型朝向修正
+            model.rotation.y=CONFIG.CHAR_MODEL_ROTATE;
             model.traverse(n=>{if(n.isMesh){n.castShadow=true;n.receiveShadow=true;}});
             grp.add(model);
-            const mixer=new THREE.AnimationMixer(model), anims=gltf.animations, actions={};
+            const mixer=new THREE.AnimationMixer(model),anims=gltf.animations,actions={};
             if(anims[CONFIG.CHAR_IDLE_IDX]){actions.idle=mixer.clipAction(anims[CONFIG.CHAR_IDLE_IDX]);actions.idle.play();}
             if(anims[CONFIG.CHAR_RUN_IDX]) actions.run=mixer.clipAction(anims[CONFIG.CHAR_RUN_IDX]);
             resolve({mixer,actions});
-        }, undefined, ()=>{
-            // Fallback 方塊（不隨 CHAR_SCALE 放大）
-            const m=new THREE.Mesh(new THREE.BoxGeometry(0.8,1.8,0.8),
-                new THREE.MeshStandardMaterial({color:students[idx].color}));
+        },undefined,()=>{
+            const m=new THREE.Mesh(new THREE.BoxGeometry(0.8,1.8,0.8),new THREE.MeshStandardMaterial({color:students[idx].color}));
             m.position.y=0.9; m.castShadow=true; grp.add(m);
             const gl=new THREE.PointLight(students[idx].color,0.5,4); gl.position.y=1.8; grp.add(gl);
             resolve({mixer:null,actions:{}});
@@ -221,100 +253,168 @@ async function loadModel(idx,grp) {
     });
 }
 
-function setSegCount(segArr,count,color) {
-    while(segArr.length<count){
-        const s=new THREE.Mesh(new THREE.SphereGeometry(CONFIG.SEG_SCALE,8,8),
-            new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:0.4}));
-        s.castShadow=true; scene.add(s); segArr.push(s);
+// ── 食物 GLB 預載 ─────────────────────────
+async function preloadFoodGLBs(){
+    if(!CONFIG.FOOD_USE_GLB) return;
+    for(let i=0;i<CONFIG.FOOD_COUNT;i++){
+        const url=CONFIG.FOOD_COUNT===1?'food.glb':`food_${i}.glb`;
+        await new Promise(resolve=>{
+            loader.load(url,gltf=>{foodGLBCache[i]=gltf.scene;console.log(`[Food] ✅ ${url}`);resolve();},
+                undefined,err=>{console.warn(`[Food] ❌ ${url}`);resolve();});
+        });
     }
-    while(segArr.length>count) scene.remove(segArr.pop());
 }
 
+// ── 建立食物 Mesh（回傳 Group）────────────
+function makeFoodGroup(typeIdx){
+    const grp=new THREE.Group();
+    const t=typeIdx??0;
+    if(CONFIG.FOOD_USE_GLB&&foodGLBCache[t%CONFIG.FOOD_COUNT]){
+        const model=foodGLBCache[t%CONFIG.FOOD_COUNT].clone(true);
+        model.scale.setScalar(CONFIG.FOOD_GLB_SCALE);
+        model.traverse(n=>{if(n.isMesh) n.castShadow=true;});
+        grp.add(model);
+    } else {
+        const color=FOOD_COLORS[t%FOOD_COLORS.length];
+        const ball=new THREE.Mesh(new THREE.SphereGeometry(0.42,12,12),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:0.85}));
+        ball.castShadow=true; grp.add(ball);
+        const light=new THREE.PointLight(color,3.0,8); grp.add(light);
+    }
+    return grp;
+}
+
+// ── 場上食物 ─────────────────────────────
+const foodMeshMap={};
+function buildFoodMesh(docId,x,z,t){
+    if(foodMeshMap[docId]) return;
+    const grp=makeFoodGroup(t); grp.position.set(x,0,z);
+    scene.add(grp); foodMeshMap[docId]=grp;
+}
+function eraseFoodMesh(docId){
+    if(!foodMeshMap[docId]) return;
+    scene.remove(foodMeshMap[docId]); delete foodMeshMap[docId];
+}
+
+// ── 尾巴管理（使用真實食物模型）────────────
+function addTailSegment(foodType){
+    const grp=makeFoodGroup(foodType);
+    // 初始放在角色位置
+    grp.position.copy(myGroup.position);
+    scene.add(grp);
+    myTail.push({mesh:grp, foodType});
+}
+function removeTailSegment(){
+    if(myTail.length===0) return null;
+    const seg=myTail.pop();
+    scene.remove(seg.mesh);
+    return seg.foodType;
+}
+function syncTailCount(count, defaultType=0){
+    while(myTail.length<count) addTailSegment(defaultType);
+    while(myTail.length>count) removeTailSegment();
+}
+
+// ── 粒子特效（命中爆炸）─────────────────
+function spawnHitParticles(pos, color=0xff4400){
+    const count=18;
+    const geo=new THREE.BufferGeometry();
+    const positions=new Float32Array(count*3);
+    const velocities=[];
+    for(let i=0;i<count;i++){
+        positions[i*3]=pos.x; positions[i*3+1]=pos.y+1; positions[i*3+2]=pos.z;
+        velocities.push(new THREE.Vector3((Math.random()-.5)*0.3,(Math.random()*0.2+0.05),(Math.random()-.5)*0.3));
+    }
+    geo.setAttribute('position',new THREE.BufferAttribute(positions,3));
+    const pts=new THREE.Points(geo,new THREE.PointsMaterial({color,size:0.25,transparent:true,opacity:1}));
+    scene.add(pts);
+    let life=1.0;
+    const tick=()=>{
+        life-=0.04;
+        if(life<=0){scene.remove(pts);return;}
+        const pos=geo.attributes.position.array;
+        for(let i=0;i<count;i++){
+            pos[i*3]  +=velocities[i].x;
+            pos[i*3+1]+=velocities[i].y; velocities[i].y-=0.008;
+            pos[i*3+2]+=velocities[i].z;
+        }
+        pts.material.opacity=life;
+        geo.attributes.position.needsUpdate=true;
+        requestAnimationFrame(tick);
+    };
+    tick();
+}
+
+// ── 子彈發射特效（拖尾光點）─────────────
+function makeBulletTrail(color){
+    const light=new THREE.PointLight(color,3,6);
+    const core=new THREE.Mesh(new THREE.SphereGeometry(0.22,8,8),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:1}));
+    const grp=new THREE.Group(); grp.add(light); grp.add(core);
+    return grp;
+}
+
+// ── 發射 ─────────────────────────────────
+function shoot(){
+    const now=Date.now();
+    if(now-lastShootTime<CONFIG.SHOOT_COOLDOWN) return;
+    if(myTail.length===0){showFlash('❌ 沒有食物可發射！');return;}
+    lastShootTime=now;
+
+    // 取出尾巴最後一個食物
+    const seg=myTail.pop();
+    scene.remove(seg.mesh);
+
+    // 建立子彈（用食物模型縮小）
+    const bulletGrp=makeFoodGroup(seg.foodType);
+    bulletGrp.scale.setScalar(0.55);
+    bulletGrp.position.copy(myGroup.position);
+    bulletGrp.position.y=1;
+
+    // 加發光拖尾
+    const trailColor=students[myIdx].color;
+    const trailLight=new THREE.PointLight(trailColor,4,8);
+    bulletGrp.add(trailLight);
+
+    scene.add(bulletGrp);
+
+    // 方向：角色面向
+    const dir=new THREE.Vector3(0,0,1).applyQuaternion(myGroup.quaternion);
+
+    bullets.push({mesh:bulletGrp, dir, life:CONFIG.BULLET_LIFETIME, ownerId:userId, foodType:seg.foodType});
+    showFlash('🚀');
+}
+
+// ── UI 工具 ───────────────────────────────
 let flashTimer=null;
 function showFlash(msg){
     const el=document.getElementById('eat-flash');
     el.textContent=msg; el.style.opacity=1;
     clearTimeout(flashTimer); flashTimer=setTimeout(()=>el.style.opacity=0,750);
 }
-function updateScore(){ document.getElementById('score-ui').innerHTML=`🐍 長度：${mySegCount+1}`; }
+function updateScore(){
+    document.getElementById('score-ui').innerHTML=`🐍 長度：${myTail.length+1}`;
+}
 function setStatus(a,b=''){document.getElementById('status-ui').innerHTML=a+(b?`<br>${b}`:'');}
 
-// ── 食物 GLB 預載 ─────────────────────────────────────────────
-async function preloadFoodGLBs() {
-    if(!CONFIG.FOOD_USE_GLB) return;
-    for(let i=0;i<CONFIG.FOOD_COUNT;i++){
-        const url=CONFIG.FOOD_COUNT===1?'food.glb':`food_${i}.glb`;
-        await new Promise(resolve=>{
-            loader.load(url, gltf=>{
-                foodGLBCache[i]=gltf.scene;
-                console.log(`[Food] ✅ ${url}`);
-                resolve();
-            }, undefined, err=>{
-                console.warn(`[Food] ❌ ${url}`,err?.message||'');
-                resolve();
-            });
-        });
-    }
-    console.log(`[Food] 預載 ${Object.keys(foodGLBCache).length}/${CONFIG.FOOD_COUNT} 種`);
-}
-
-// ── 食物 Mesh ─────────────────────────────────────────────────
-function buildFoodMesh(docId,x,z,t) {
-    if(foodMeshes[docId]) return;
-    const grp=new THREE.Group(); grp.position.set(x,0,z);
-    if(CONFIG.FOOD_USE_GLB&&foodGLBCache[t??0]){
-        const model=foodGLBCache[t??0].clone(true);
-        model.scale.setScalar(CONFIG.FOOD_GLB_SCALE);
-        model.traverse(n=>{if(n.isMesh) n.castShadow=true;});
-        grp.add(model);
-    } else {
-        const color=FOOD_COLORS[(t??0)%FOOD_COLORS.length];
-        const ball=new THREE.Mesh(new THREE.SphereGeometry(0.42,12,12),
-            new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:0.85}));
-        ball.castShadow=true; grp.add(ball);
-        grp.add(Object.assign(new THREE.PointLight(color,3.0,8)));
-    }
-    scene.add(grp); foodMeshes[docId]=grp;
-}
-
-function eraseFoodMesh(docId){
-    if(!foodMeshes[docId]) return;
-    scene.remove(foodMeshes[docId]); delete foodMeshes[docId];
-}
-
-// ── 食物生成（★ 由第一個連線的玩家當主機負責生成）────────────
+// ── 主機 / 食物生成 ───────────────────────
 let isHost=false, lastHostCheck=0;
-const HOST_DOC = `artifacts/${APP_ID}/public/data/meta`;
-
-async function checkAndClaimHost() {
+const HOST_DOC=`artifacts/${APP_ID}/public/data/meta`;
+async function checkAndClaimHost(){
     if(!db) return;
     const now=Date.now();
     if(now-lastHostCheck<10000) return;
     lastHostCheck=now;
-    try {
+    try{
         const snap=await getDoc(doc(db,HOST_DOC));
         const data=snap.exists()?snap.data():{};
-        const hostExpiry=data.hostExpiry??0;
-        const hostId=data.hostId??'';
-
-        if(hostId===userId){
-            // 我是主機，續租
+        if(data.hostId===userId||now>( data.hostExpiry??0)){
             isHost=true;
             await setDoc(doc(db,HOST_DOC),{hostId:userId,hostExpiry:now+15000},{merge:true});
-        } else if(now>hostExpiry){
-            // 主機過期，接管
-            isHost=true;
-            await setDoc(doc(db,HOST_DOC),{hostId:userId,hostExpiry:now+15000},{merge:true});
-            console.log('[Host] 成為主機，負責生成食物');
-        } else {
-            isHost=false;
-        }
-    } catch(e){}
+        } else { isHost=false; }
+    }catch(e){}
 }
-
-async function spawnFoodIfHost() {
+async function spawnFoodIfHost(){
     if(!isHost||!db||!foodColRef) return;
-    try {
+    try{
         const snap=await getDocs(foodColRef);
         if(snap.size>=CONFIG.FOOD_MAX) return;
         const need=Math.min(4,CONFIG.FOOD_MAX-snap.size);
@@ -326,108 +426,87 @@ async function spawnFoodIfHost() {
             writes.push(addDoc(foodColRef,{x,z,t,ts:Date.now()}));
         }
         if(writes.length) await Promise.all(writes);
-    } catch(e){ console.warn('[Food spawn]',e.code); }
+    }catch(e){}
+}
+async function cleanupStalePlayers(){
+    if(!isHost||!db) return;
+    try{
+        const snap=await getDocs(collection(db,'artifacts',APP_ID,'public','data','players'));
+        const now=Date.now();
+        snap.forEach(async dSnap=>{
+            if(dSnap.data().lastSeen&&now-dSnap.data().lastSeen>15000&&dSnap.id!==userId)
+                await deleteDoc(dSnap.ref);
+        });
+    }catch(e){}
 }
 
-// ── ★ 智慧位置上傳（只在有變化時才寫入）──────────────────────
-async function smartUpload() {
+// ── 智慧上傳 ─────────────────────────────
+async function smartUpload(){
     if(!userId||!db) return;
     const now=Date.now();
-    const pos=myGroup.position;
-    const rot=myGroup.rotation.y;
-
-    const moved = pos.distanceTo(lastUploadPos)>UPLOAD_MOVE_THRESHOLD;
-    const rotated = Math.abs(rot-lastUploadRot)>0.05;
-    const segChanged = mySegCount!==lastUploadSeg;
-    const forceDue = (now-lastUploadTime)>UPLOAD_FORCE_INTERVAL;
-
-    // 沒有任何變化且不到強制時間，跳過
-    if(!moved&&!rotated&&!segChanged&&!forceDue) return;
-
-    lastUploadPos.copy(pos);
-    lastUploadRot=rot;
-    lastUploadSeg=mySegCount;
-    lastUploadTime=now;
-
-    try {
+    const pos=myGroup.position, rot=myGroup.rotation.y;
+    const moved=pos.distanceTo(lastUploadPos)>UPLOAD_THRESHOLD;
+    const changed=Math.abs(rot-lastUploadRot)>0.05||myTail.length!==lastUploadSeg;
+    const force=(now-lastUploadTime)>UPLOAD_FORCE;
+    if(!moved&&!changed&&!force) return;
+    lastUploadPos.copy(pos); lastUploadRot=rot; lastUploadSeg=myTail.length; lastUploadTime=now;
+    try{
         await setDoc(doc(db,'artifacts',APP_ID,'public','data','players',userId),{
-            x:pos.x, z:pos.z, rot, idx:myIdx,
-            segCount:mySegCount,
+            x:pos.x,z:pos.z,rot,idx:myIdx,
+            segCount:myTail.length,
             isMoving:keys.isMoving||joyActive,
             lastSeen:now
         },{merge:true});
-    } catch(e){}
+    }catch(e){}
 }
 
-// ── 碰撞奪取 ─────────────────────────────────────────────────
-async function trySteal(uid) {
+// ── 碰撞奪取 ─────────────────────────────
+async function trySteal(uid){
     const now=Date.now();
     if(stealCD[uid]&&now-stealCD[uid]<2000) return;
     stealCD[uid]=now;
     const p=otherPlayers[uid];
     if(!p||p.segCount<=0||!db) return;
     const n=Math.min(CONFIG.STEAL_AMOUNT,p.segCount);
-    mySegCount+=n;
-    setSegCount(mySegments,mySegCount,students[myIdx].color);
-    showFlash(`⚡ +${n}`); updateScore();
-    try {
+    for(let i=0;i<n;i++) addTailSegment(Math.floor(Math.random()*CONFIG.FOOD_COUNT));
+    updateScore(); showFlash(`⚡ +${n}`);
+    try{
         await setDoc(doc(db,'artifacts',APP_ID,'public','data','players',uid),
             {segCount:Math.max(0,p.segCount-n)},{merge:true});
-    } catch(e){}
+    }catch(e){}
 }
 
-// ── 離線玩家清理（主機負責）───────────────────────────────────
-async function cleanupStalePlayers() {
-    if(!isHost||!db) return;
-    try {
-        const snap=await getDocs(collection(db,'artifacts',APP_ID,'public','data','players'));
-        const now=Date.now();
-        snap.forEach(async dSnap=>{
-            const d=dSnap.data();
-            if(d.lastSeen&&now-d.lastSeen>15000&&dSnap.id!==userId){
-                await deleteDoc(dSnap.ref);
-                console.log('[Cleanup] 移除離線玩家',dSnap.id.slice(0,6));
-            }
-        });
-    } catch(e){}
-}
-
-// ── Firebase 啟動 ─────────────────────────────────────────────
-async function initFirebase() {
-    try {
+// ── Firebase ──────────────────────────────
+async function initFirebase(){
+    try{
         const app=initializeApp(firebaseConfig);
         const auth=getAuth(app);
         db=getFirestore(app);
         setStatus('🔄 正在連線...');
         await signInAnonymously(auth);
-
-        onAuthStateChanged(auth, user=>{
+        onAuthStateChanged(auth,user=>{
             if(!user) return;
             userId=user.uid;
             setStatus('多人連線中 ✅','WASD / 搖桿 移動');
+            foodColRef=collection(db,'artifacts',APP_ID,'public','data','food');
+            playersColRef=collection(db,'artifacts',APP_ID,'public','data','players');
 
-            foodColRef  = collection(db,'artifacts',APP_ID,'public','data','food');
-            playersColRef = collection(db,'artifacts',APP_ID,'public','data','players');
-
-            // ── 食物監聽（只讀，不寫）────────────────────────
-            onSnapshot(foodColRef, snap=>{
+            onSnapshot(foodColRef,snap=>{
                 const live=new Set(snap.docs.map(d=>d.id));
-                Object.keys(foodMeshes).forEach(id=>{if(!live.has(id)) eraseFoodMesh(id);});
+                Object.keys(foodMeshMap).forEach(id=>{if(!live.has(id)) eraseFoodMesh(id);});
                 snap.forEach(d=>buildFoodMesh(d.id,d.data().x,d.data().z,d.data().t));
                 setStatus('多人連線中 ✅',`WASD / 搖桿 移動　🍎 ${snap.size}`);
             });
 
-            // ── 玩家監聽（只讀）──────────────────────────────
-            onSnapshot(playersColRef, snap=>{
+            onSnapshot(playersColRef,snap=>{
                 const liveIds=new Set(snap.docs.map(d=>d.id));
                 snap.forEach(async dSnap=>{
-                    const data=dSnap.data(), uid=dSnap.id;
+                    const data=dSnap.data(),uid=dSnap.id;
                     if(uid===userId){
-                        // 被偷同步
-                        if(typeof data.segCount==='number'&&data.segCount<mySegCount){
-                            const lost=mySegCount-data.segCount;
-                            mySegCount=data.segCount;
-                            setSegCount(mySegments,mySegCount,students[myIdx].color);
+                        // 被子彈/偷同步
+                        if(typeof data.segCount==='number'&&data.segCount<myTail.length){
+                            const lost=myTail.length-data.segCount;
+                            for(let i=0;i<lost;i++) removeTailSegment();
                             showFlash(`💀 -${lost}`); updateScore();
                         }
                         return;
@@ -438,30 +517,20 @@ async function initFirebase() {
                 updateCardUI(snap.docs.map(d=>d.data().idx));
             });
 
-            // ── 智慧上傳：每 200ms 檢查一次，但只在有變化時寫入 ──
-            setInterval(smartUpload, 200);
+            setInterval(smartUpload,200);
+            checkAndClaimHost(); setInterval(checkAndClaimHost,8000);
+            setTimeout(()=>{checkAndClaimHost().then(spawnFoodIfHost);},1000);
+            setInterval(spawnFoodIfHost,10000);
+            setInterval(cleanupStalePlayers,20000);
 
-            // ── 主機競選：每 8 秒 ────────────────────────────
-            checkAndClaimHost();
-            setInterval(checkAndClaimHost, 8000);
-
-            // ── 食物生成：每 10 秒（只有主機執行）────────────
-            setTimeout(()=>{checkAndClaimHost().then(spawnFoodIfHost);}, 1000);
-            setInterval(spawnFoodIfHost, 10000);
-
-            // ── 離線清理：每 20 秒（只有主機執行）────────────
-            setInterval(cleanupStalePlayers, 20000);
-
-            // ── 離開時刪除自己 ───────────────────────────────
-            window.addEventListener('beforeunload', ()=>{
-                if(userId&&db)
-                    deleteDoc(doc(db,'artifacts',APP_ID,'public','data','players',userId)).catch(()=>{});
+            window.addEventListener('beforeunload',()=>{
+                if(userId&&db) deleteDoc(doc(db,'artifacts',APP_ID,'public','data','players',userId)).catch(()=>{});
             });
         });
-    } catch(err){ setStatus('⚠️ 連線失敗',err.message); }
+    }catch(err){setStatus('⚠️ 連線失敗',err.message);}
 }
 
-async function handleRemote(uid,data) {
+async function handleRemote(uid,data){
     if(!otherPlayers[uid]){
         const grp=new THREE.Group(); scene.add(grp);
         otherPlayers[uid]={grp,segments:[],path:[],idx:-1,segCount:0};
@@ -473,7 +542,14 @@ async function handleRemote(uid,data) {
         p.idx=data.idx;
         const r=await loadModel(p.idx,p.grp); p.mixer=r.mixer; p.actions=r.actions;
     }
-    setSegCount(p.segments,p.segCount,students[data.idx]?.color??0xffffff);
+    // 遠端尾巴用球代替（節省 GLB 克隆效能）
+    while(p.segments.length<p.segCount){
+        const c=students[data.idx]?.color??0xffffff;
+        const s=new THREE.Mesh(new THREE.SphereGeometry(CONFIG.SEG_SCALE,8,8),
+            new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:0.4}));
+        scene.add(s); p.segments.push(s);
+    }
+    while(p.segments.length>p.segCount) scene.remove(p.segments.pop());
 }
 
 function removeRemote(uid){
@@ -483,19 +559,80 @@ function removeRemote(uid){
     delete otherPlayers[uid];
 }
 
-// ── 搖桿 ─────────────────────────────────────────────────────
-const knob=document.getElementById('joystick-knob');
-addEventListener('touchstart',e=>{const t=e.touches[0];if(t.clientX<200&&t.clientY>innerHeight-250) joyActive=true;});
-addEventListener('touchmove',e=>{
-    if(!joyActive) return;
-    const t=e.touches[0],r=document.getElementById('joystick-base').getBoundingClientRect();
-    joyX=(t.clientX-r.left-r.width/2)/60; joyY=(t.clientY-r.top-r.height/2)/60;
-    const d=Math.hypot(joyX,joyY); if(d>1){joyX/=d;joyY/=d;}
-    knob.style.transform=`translate(${joyX*35}px,${joyY*35}px)`;
+// ── 輸入：鍵盤 ───────────────────────────
+addEventListener('keydown',e=>{
+    keys[e.key.toLowerCase()]=true;
+    if(e.code==='Space'){e.preventDefault();shoot();}
 });
-addEventListener('touchend',()=>{joyActive=false;joyX=joyY=0;knob.style.transform='translate(0,0)';});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
 
-// ── 主迴圈 ───────────────────────────────────────────────────
+// ── 輸入：滑鼠拖曳旋轉視角 ───────────────
+const canvas=renderer.domElement;
+canvas.addEventListener('mousedown',e=>{
+    if(e.button===0){dragActive=true;dragLastX=e.clientX;dragLastY=e.clientY;}
+});
+canvas.addEventListener('mousemove',e=>{
+    if(!dragActive) return;
+    camAngle -=(e.clientX-dragLastX)*0.005;
+    camPitch  = Math.max(0.1,Math.min(1.2,camPitch+(e.clientY-dragLastY)*0.003));
+    dragLastX=e.clientX; dragLastY=e.clientY;
+});
+canvas.addEventListener('mouseup',()=>dragActive=false);
+canvas.addEventListener('mouseleave',()=>dragActive=false);
+
+// ── 輸入：觸控（搖桿 + 視角旋轉分開）────
+const joyBase=document.getElementById('joystick-base');
+const joyZoneRect=()=>document.getElementById('joystick-zone').getBoundingClientRect();
+const knob=document.getElementById('joystick-knob');
+
+canvas.addEventListener('touchstart',e=>{
+    Array.from(e.changedTouches).forEach(t=>{
+        const jRect=joyZoneRect();
+        const inJoy=t.clientX>=jRect.left&&t.clientX<=jRect.right&&t.clientY>=jRect.top&&t.clientY<=jRect.bottom;
+        if(inJoy){
+            // 搖桿
+            if(touchIds.joy===-1){ touchIds.joy=t.identifier; joyActive=true; }
+        } else {
+            // 視角旋轉
+            if(touchIds.cam===-1){ touchIds.cam=t.identifier; dragActive=true; dragLastX=t.clientX; dragLastY=t.clientY; }
+        }
+    });
+},{passive:true});
+
+canvas.addEventListener('touchmove',e=>{
+    Array.from(e.changedTouches).forEach(t=>{
+        if(t.identifier===touchIds.joy){
+            const r=joyBase.getBoundingClientRect();
+            joyX=(t.clientX-r.left-r.width/2)/55; joyY=(t.clientY-r.top-r.height/2)/55;
+            const d=Math.hypot(joyX,joyY); if(d>1){joyX/=d;joyY/=d;}
+            knob.style.transform=`translate(${joyX*32}px,${joyY*32}px)`;
+        }
+        if(t.identifier===touchIds.cam&&dragActive){
+            camAngle -=(t.clientX-dragLastX)*0.006;
+            camPitch  = Math.max(0.1,Math.min(1.2,camPitch+(t.clientY-dragLastY)*0.004));
+            dragLastX=t.clientX; dragLastY=t.clientY;
+        }
+    });
+},{passive:true});
+
+canvas.addEventListener('touchend',e=>{
+    Array.from(e.changedTouches).forEach(t=>{
+        if(t.identifier===touchIds.joy){ touchIds.joy=-1; joyActive=false; joyX=joyY=0; knob.style.transform='translate(0,0)'; }
+        if(t.identifier===touchIds.cam){ touchIds.cam=-1; dragActive=false; }
+    });
+},{passive:true});
+
+// 搖桿區觸控（讓搖桿優先）
+document.getElementById('joystick-zone').addEventListener('touchstart',e=>{
+    const t=e.touches[0];
+    if(touchIds.joy===-1){ touchIds.joy=t.identifier; joyActive=true; }
+},{passive:true});
+
+// 發射鈕
+document.getElementById('shoot-btn').addEventListener('touchstart',e=>{e.preventDefault();shoot();},{passive:false});
+document.getElementById('shoot-btn').addEventListener('click',shoot);
+
+// ── 主迴圈 ───────────────────────────────
 const clock=new THREE.Clock();
 let foodBob=0;
 
@@ -504,6 +641,7 @@ function animate(){
     const dt=clock.getDelta();
     foodBob+=dt*2;
 
+    // 移動
     let spd=0;
     if(keys['w']||keys['arrowup'])    spd= CONFIG.MOVE_SPEED;
     if(keys['s']||keys['arrowdown'])  spd=-CONFIG.MOVE_SPEED;
@@ -511,59 +649,109 @@ function animate(){
     if(keys['d']||keys['arrowright']) myGroup.rotation.y-=CONFIG.TURN_SPEED;
     if(joyActive){
         const d=Math.hypot(joyX,joyY);
-        if(d>0.1){myGroup.rotation.y=Math.atan2(-joyX,-joyY);spd=CONFIG.MOVE_SPEED*d;}
+        if(d>0.1){
+            // 搖桿方向疊加攝影機角度
+            const angle=Math.atan2(joyX,joyY)+camAngle;
+            myGroup.rotation.y=angle+Math.PI;
+            spd=CONFIG.MOVE_SPEED*d;
+        }
     }
-
     const moving=spd!==0;
     if(moving) myGroup.translateZ(spd);
     keys.isMoving=moving;
     if(myMixer){myMixer.update(dt);safeSetRunning(myActions,moving);}
 
+    // 路徑記錄
     myPath.unshift({pos:myGroup.position.clone()});
     if(myPath.length>500) myPath.pop();
-    mySegments.forEach((s,i)=>{
+
+    // 尾巴跟隨（使用食物 GLB mesh）
+    myTail.forEach((seg,i)=>{
         const step=(i+1)*CONFIG.SEG_SPACING;
-        if(myPath[step]) s.position.lerp(myPath[step].pos,0.4);
+        if(myPath[step]){
+            seg.mesh.position.lerp(myPath[step].pos,0.4);
+            seg.mesh.position.y=0.5+Math.sin(foodBob+i*0.8)*0.12;
+            seg.mesh.rotation.y+=dt*0.8;
+        }
     });
 
-    // 食物動畫 + 吃食物
+    // 場上食物動畫 + 吃食物
     const hp=myGroup.position;
-    Object.entries(foodMeshes).forEach(([id,grp])=>{
+    Object.entries(foodMeshMap).forEach(([id,grp])=>{
         grp.position.y=0.5+Math.sin(foodBob+id.charCodeAt(0)*0.5)*0.22;
         grp.rotation.y+=dt*1.2;
         if(hp.distanceTo(grp.position)<CONFIG.FOOD_EAT_DIST){
+            const t=grp.userData.foodType??0;
             eraseFoodMesh(id);
-            mySegCount++;
-            setSegCount(mySegments,mySegCount,students[myIdx].color);
+            addTailSegment(t);
             updateScore(); showFlash('🍎 +1');
+            // 吃到特效
+            spawnHitParticles(grp.position.clone(), FOOD_COLORS[t%FOOD_COLORS.length]);
             if(db) deleteDoc(doc(db,'artifacts',APP_ID,'public','data','food',id)).catch(()=>{});
         }
     });
 
-    // 碰撞
+    // 子彈更新
+    for(let i=bullets.length-1;i>=0;i--){
+        const b=bullets[i];
+        b.life-=dt;
+        b.mesh.position.addScaledVector(b.dir, CONFIG.BULLET_SPEED);
+        b.mesh.rotation.y+=dt*4;
+
+        // 命中判定
+        let hit=false;
+        for(const [uid,p] of Object.entries(otherPlayers)){
+            if(b.mesh.position.distanceTo(p.grp.position)<CONFIG.BULLET_HIT_DIST){
+                // 命中！
+                spawnHitParticles(b.mesh.position.clone(),0xff4400);
+                scene.remove(b.mesh);
+                bullets.splice(i,1);
+                hit=true;
+                // 對方減少節段
+                if(db) setDoc(doc(db,'artifacts',APP_ID,'public','data','players',uid),
+                    {segCount:Math.max(0,(p.segCount??1)-2)},{merge:true}).catch(()=>{});
+                showFlash('💥 命中！');
+                break;
+            }
+        }
+        if(!hit&&b.life<=0){
+            scene.remove(b.mesh);
+            bullets.splice(i,1);
+        }
+    }
+
+    // 碰撞奪取
     for(const [uid,p] of Object.entries(otherPlayers)){
         for(const seg of p.segments){
             if(hp.distanceTo(seg.position)<CONFIG.STEAL_DIST){trySteal(uid);break;}
         }
     }
 
-    // 遠端更新
+    // 遠端玩家
     for(const [,p] of Object.entries(otherPlayers)){
         if(p.targetPos) p.grp.position.lerp(p.targetPos,0.15);
         if(p.targetRot!==undefined) p.grp.rotation.y=THREE.MathUtils.lerp(p.grp.rotation.y,p.targetRot,0.15);
         if(p.mixer){p.mixer.update(dt);safeSetRunning(p.actions,p.remoteMoving);}
+        p.path=p.path||[];
         p.path.unshift({pos:p.grp.position.clone()});
         if(p.path.length>500) p.path.pop();
-        p.segments.forEach((s,i)=>{const st=(i+1)*CONFIG.SEG_SPACING;if(p.path[st]) s.position.lerp(p.path[st].pos,0.4);});
+        p.segments.forEach((s,i)=>{
+            const st=(i+1)*CONFIG.SEG_SPACING;
+            if(p.path[st]) s.position.lerp(p.path[st].pos,0.4);
+        });
     }
 
-    const ic=new THREE.Vector3(0,7,-16).applyMatrix4(myGroup.matrixWorld);
-    camera.position.lerp(ic,0.1);
+    // ── 攝影機（支援旋轉）────────────────
+    const tx=myGroup.position.x+Math.sin(camAngle)*CAM_DIST*Math.cos(camPitch);
+    const ty=myGroup.position.y+Math.sin(camPitch)*CAM_DIST+CAM_H*0.3;
+    const tz=myGroup.position.z+Math.cos(camAngle)*CAM_DIST*Math.cos(camPitch);
+    camera.position.lerp(new THREE.Vector3(tx,ty,tz),0.1);
     camera.lookAt(myGroup.position.x,1.5,myGroup.position.z);
+
     renderer.render(scene,camera);
 }
 
-// ── UI ───────────────────────────────────────────────────────
+// ── UI ───────────────────────────────────
 function initUI(){
     const grid=document.getElementById('selection-grid');
     students.forEach((s,i)=>{
@@ -584,15 +772,16 @@ function updateCardUI(idxs){
 async function switchChar(idx){
     myIdx=idx;
     document.querySelectorAll('.character-card').forEach((c,i)=>c.classList.toggle('active',i===idx));
-    setSegCount(mySegments,mySegCount,students[idx].color);
     const r=await loadModel(idx,myGroup); myMixer=r.mixer; myActions=r.actions;
 }
 
-addEventListener('keydown',e=>{ keys[e.key.toLowerCase()]=true; });
-addEventListener('keyup',  e=>{ keys[e.key.toLowerCase()]=false; });
-addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+addEventListener('resize',()=>{
+    camera.aspect=innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight);
+});
 
-// ── 啟動 ─────────────────────────────────────────────────────
+// ── 啟動 ─────────────────────────────────
 initUI();
 switchChar(0);
 await preloadFoodGLBs();
