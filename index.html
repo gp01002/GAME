@@ -163,7 +163,9 @@ buildScene();
 
 // ── 玩家狀態 ─────────────────────────────────────────────────
 let userId=null, myIdx=0;
-const myGroup=new THREE.Group(); scene.add(myGroup);
+const myGroup=new THREE.Group();
+myGroup.rotation.y = Math.PI; // ★ 初始面向前方（背對攝影機）
+scene.add(myGroup);
 let myMixer=null, myActions={};
 let mySegments=[], myPath=[], mySegCount=0;
 
