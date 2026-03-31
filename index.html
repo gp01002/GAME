@@ -174,9 +174,9 @@ function buildScene() {
     floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
     scene.add(new THREE.AmbientLight(0xffffff,2.5));
     const sun=new THREE.DirectionalLight(0xffffff,3.0); sun.position.set(20,40,20); sun.castShadow=true; scene.add(sun);
-    scene.add(Object.assign(new THREE.PointLight(0x88ddff,4,120),{position:{x:0,y:20,z:0}}));
-    scene.add(Object.assign(new THREE.PointLight(0xffccaa,2,80),{position:{x:-30,y:10,z:30}}));
-    scene.add(Object.assign(new THREE.PointLight(0xaaffcc,2,80),{position:{x:30,y:10,z:-30}}));
+    const rl1=new THREE.PointLight(0x88ddff,4,120); rl1.position.set(0,20,0); scene.add(rl1);
+    const rl2=new THREE.PointLight(0xffccaa,2,80); rl2.position.set(-30,10,30); scene.add(rl2);
+    const rl3=new THREE.PointLight(0xaaffcc,2,80); rl3.position.set(30,10,-30); scene.add(rl3);
     const pm=new THREE.MeshStandardMaterial({color:0x00f2ff,emissive:0x00f2ff,emissiveIntensity:0.8,transparent:true,opacity:0.4});
     [[-CONFIG.FIELD_SIZE,CONFIG.FIELD_SIZE],[CONFIG.FIELD_SIZE,CONFIG.FIELD_SIZE],[CONFIG.FIELD_SIZE,-CONFIG.FIELD_SIZE],[-CONFIG.FIELD_SIZE,-CONFIG.FIELD_SIZE]].forEach(([x,z])=>{
         const p=new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.15,6,8),pm); p.position.set(x,2,z); scene.add(p);
