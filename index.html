@@ -65,22 +65,22 @@ import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, getDocs, 
 // ╚══════════════════════════════════════════════════════════╝
 
 const CONFIG = {
-    CHAR_SCALE:      1.8,    // ★ 角色大小（原始約 1.0，建議 1.5～2.5）
+    CHAR_SCALE:      3.5,    // ★ 角色大小（調大調小改這裡）
     CHAR_IDLE_IDX:   0,      // GLB 待機動畫 index
     CHAR_RUN_IDX:    1,      // GLB 跑步動畫 index
-    SEG_SCALE:       0.45,   // 蛇身球大小
+    SEG_SCALE:       0.6,    // 蛇身球大小
     FOOD_COUNT:      1,      // ★ 目前用 food.glb（之後改成 6 就會讀 food_0.glb～food_5.glb）
     FOOD_USE_GLB:    true,   // ★ 已開啟 3D GLB 食物 ✅
-    FOOD_GLB_SCALE:  0.6,    // 食物模型縮放（太大/太小調這裡）
+    FOOD_GLB_SCALE:  1.8,    // ★ 食物模型縮放（調大調小改這裡）
     FOOD_MAX:        15,
-    FOOD_EAT_DIST:   2.0,
-    STEAL_DIST:      1.4,
+    FOOD_EAT_DIST:   2.5,    // 吃到食物的距離（食物變大後一起調大）
+    STEAL_DIST:      1.6,
     SEG_SPACING:     10,
     MOVE_SPEED:      0.18,
     TURN_SPEED:      0.055,
     FIELD_SIZE:      38,
     STEAL_AMOUNT:    3,
-    SKY_IMG:         'sky.jpg', // ★ 填入背景圖檔名，例如 'sky.jpg'；空字串 = 預設星空
+    SKY_IMG:         'sky.jpg',
 };
 
 // ── Firebase ──────────────────────────────────────────────────
@@ -151,17 +151,20 @@ function buildScene() {
     scene.add(floor);
 
     // 燈光
-    scene.add(new THREE.AmbientLight(0x8899cc, 0.8));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+    scene.add(new THREE.AmbientLight(0xffffff, 2.5));        // ★ 大幅提升環境光
+    const sun = new THREE.DirectionalLight(0xffffff, 3.0);   // ★ 主光源加強
     sun.position.set(20,40,20);
     sun.castShadow = true;
     scene.add(sun);
-    const rimLight = new THREE.PointLight(0x00f2ff, 3, 80);
-    rimLight.position.set(0,15,0);
+    const rimLight = new THREE.PointLight(0x88ddff, 4, 120); // ★ 藍色補光加強
+    rimLight.position.set(0,20,0);
     scene.add(rimLight);
-    const rimLight2 = new THREE.PointLight(0xff44aa, 1.5, 60);
-    rimLight2.position.set(-30,8,30);
+    const rimLight2 = new THREE.PointLight(0xffccaa, 2, 80); // ★ 暖色補光
+    rimLight2.position.set(-30,10,30);
     scene.add(rimLight2);
+    const rimLight3 = new THREE.PointLight(0xaaffcc, 2, 80); // ★ 綠色補光（背面）
+    rimLight3.position.set(30,10,-30);
+    scene.add(rimLight3);
 
     // 場地邊界光柱（裝飾）
     const pillarMat = new THREE.MeshStandardMaterial({color:0x00f2ff,emissive:0x00f2ff,emissiveIntensity:0.8,transparent:true,opacity:0.4});
@@ -268,7 +271,7 @@ function buildFoodMesh(docId, x, z, typeIdx) {
         );
         ball.castShadow = true;
         group.add(ball);
-        const light = new THREE.PointLight(color,1.2,5);
+        const light = new THREE.PointLight(color, 3.0, 8);  // ★ 食物光暈加強
         group.add(light);
     }
 
