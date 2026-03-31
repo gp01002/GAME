@@ -224,10 +224,10 @@ async function loadModel(idx, grp) {
             if (anims[CONFIG.CHAR_RUN_IDX])  { actions.run =mixer.clipAction(anims[CONFIG.CHAR_RUN_IDX]); }
             resolve({mixer,actions});
         }, undefined, ()=>{
-            // Fallback 方塊（放大比例）
-            const h = 1.8 * CONFIG.CHAR_SCALE;
+            // Fallback 方塊（沒有 GLB 時顯示，大小固定不隨 CHAR_SCALE 放大）
+            const h = 1.8;
             const m=new THREE.Mesh(
-                new THREE.BoxGeometry(0.8*CONFIG.CHAR_SCALE, h, 0.8*CONFIG.CHAR_SCALE),
+                new THREE.BoxGeometry(0.8, h, 0.8),
                 new THREE.MeshStandardMaterial({color:students[idx].color})
             );
             m.position.y = h/2; m.castShadow=true;
@@ -244,10 +244,23 @@ async function preloadFoodGLBs() {
     for (let i=0; i<CONFIG.FOOD_COUNT; i++) {
         const url = CONFIG.FOOD_COUNT===1 ? 'food.glb' : `food_${i}.glb`;
         await new Promise(resolve=>{
-            loader.load(url, gltf=>{ foodGLBCache[i]=gltf.scene; resolve(); }, undefined, ()=>resolve());
+            loader.load(url,
+                gltf => {
+                    foodGLBCache[i] = gltf.scene;
+                    console.log(`[Food GLB] ✅ 載入成功: ${url}`);
+                    resolve();
+                },
+                undefined,
+                err => {
+                    console.error(`[Food GLB] ❌ 載入失敗: ${url}`, err);
+                    resolve(); // 失敗也繼續，用發光球替代
+                }
+            );
         });
     }
-    console.log('[Food GLB] 預載完成', Object.keys(foodGLBCache).length, '種');
+    const loaded = Object.keys(foodGLBCache).length;
+    console.log(`[Food GLB] 預載完成 ${loaded}/${CONFIG.FOOD_COUNT} 種`);
+    if (loaded === 0) console.warn('[Food GLB] 全部失敗，將使用發光球替代');
 }
 
 // ── 食物 Mesh 建立 ─────────────────────────────────────────────
