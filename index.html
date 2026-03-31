@@ -69,9 +69,9 @@ const CONFIG = {
     CHAR_IDLE_IDX:   0,      // GLB 待機動畫 index
     CHAR_RUN_IDX:    1,      // GLB 跑步動畫 index
     SEG_SCALE:       0.45,   // 蛇身球大小
-    FOOD_COUNT:      4,      // food_0.glb ～ food_{N-1}.glb 的數量（若只有 food.glb 則設 1）
-    FOOD_USE_GLB:    false,  // ★ true = 使用 3D GLB 食物；false = 用發光球代替
-    FOOD_GLB_SCALE:  0.6,    // 食物模型縮放
+    FOOD_COUNT:      1,      // food GLB 數量（FOOD_USE_GLB=false 時不影響）
+    FOOD_USE_GLB:    false,  // false = 發光球（不需上傳任何食物檔案）✅
+    FOOD_GLB_SCALE:  0.6,    // 食物模型縮放（GLB 模式才有效）
     FOOD_MAX:        15,
     FOOD_EAT_DIST:   2.0,
     STEAL_DIST:      1.4,
@@ -311,7 +311,7 @@ let lastSpawnAttempt=0;
 async function trySpawnFood() {
     if (!db||!foodColRef) return;
     const now=Date.now();
-    if (now-lastSpawnAttempt<2500) return;
+    if (now-lastSpawnAttempt<2000) return;
     lastSpawnAttempt=now;
     try {
         const snap=await getDocs(foodColRef);
@@ -415,7 +415,9 @@ async function initFirebase() {
             },100);
 
             trySpawnFood();
-            setInterval(trySpawnFood,2500);
+            setTimeout(trySpawnFood, 800);
+            setTimeout(trySpawnFood, 2000);
+            setInterval(trySpawnFood, 2500);
         });
     } catch(err) { setStatus('⚠️ 連線失敗',err.message); }
 }
