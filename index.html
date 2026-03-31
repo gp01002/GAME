@@ -7,7 +7,7 @@
     <style>
         *{box-sizing:border-box;}
         body{margin:0;overflow:hidden;background:#02050f;font-family:"Microsoft JhengHei",sans-serif;touch-action:none;}
-        #game-container{position:absolute;top:0;left:0;width:100%;height:100%;}
+        #game-container{position:fixed;top:0;left:0;width:100%;height:100%;}
 
         /* ── 底部角色列（手機可橫向滑動）── */
         #overlay{
@@ -39,22 +39,23 @@
         .character-name{font-size:7px;color:#aaa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
 
         /* ── 左搖桿 ── */
-        #joystick-zone{position:fixed;bottom:80px;left:20px;width:110px;height:110px;z-index:200;display:none;}
-        #joystick-base{width:100%;height:100%;background:rgba(255,255,255,0.08);border-radius:50%;border:2px solid rgba(255,255,255,0.2);position:relative;}
-        #joystick-knob{position:absolute;top:32px;left:32px;width:46px;height:46px;background:rgba(0,242,255,0.55);border-radius:50%;box-shadow:0 0 14px rgba(0,242,255,0.5);}
+        #joystick-zone{position:fixed;bottom:80px;left:20px;width:110px;height:110px;z-index:500;display:none;}
+        #joystick-base{width:100%;height:100%;background:rgba(255,255,255,0.12);border-radius:50%;border:2px solid rgba(0,242,255,0.5);position:relative;}
+        #joystick-knob{position:absolute;top:32px;left:32px;width:46px;height:46px;background:rgba(0,242,255,0.7);border-radius:50%;box-shadow:0 0 16px rgba(0,242,255,0.7);}
 
-        /* ── 發射鈕（手機右下）── */
+        /* ── 發射鈕 ── */
         #shoot-btn{
             position:fixed;bottom:90px;right:20px;
-            width:70px;height:70px;border-radius:50%;
-            background:rgba(255,80,80,0.8);border:3px solid #ff4444;
-            color:#fff;font-size:22px;font-weight:bold;
+            width:72px;height:72px;border-radius:50%;
+            background:rgba(255,80,80,0.85);border:3px solid #ff4444;
+            color:#fff;font-size:26px;
             display:none;align-items:center;justify-content:center;
-            z-index:200;cursor:pointer;
-            box-shadow:0 0 20px rgba(255,80,80,0.6);
+            z-index:500;cursor:pointer;
+            box-shadow:0 0 22px rgba(255,80,80,0.7);
             user-select:none;-webkit-user-select:none;
+            touch-action:none;
         }
-        #shoot-btn:active{transform:scale(0.92);background:rgba(255,120,120,0.9);}
+        #shoot-btn:active{transform:scale(0.90);}
 
         /* ── 狀態 / 分數 ── */
         #status-ui{position:fixed;top:15px;left:15px;color:#00f2ff;background:rgba(5,10,26,0.7);padding:5px 12px;font-size:11px;border-left:2px solid #00f2ff;pointer-events:none;z-index:150;line-height:1.8;}
@@ -67,8 +68,8 @@
         #hint-ui{position:fixed;bottom:75px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.4);font-size:10px;pointer-events:none;z-index:150;white-space:nowrap;}
 
         @media (pointer:coarse){
-            #joystick-zone{display:block;}
-            #shoot-btn{display:flex;}
+            #joystick-zone{display:block !important;}
+            #shoot-btn{display:flex !important;}
             #hint-ui{display:none;}
         }
     </style>
@@ -212,6 +213,7 @@ const otherPlayers={}, foodMeshes={}, stealCD={};
 let db=null, foodColRef=null, playersColRef=null;
 const foodGLBCache={};
 const loader=new GLTFLoader(), keys={};
+const knob=document.getElementById('joystick-knob');
 let joyActive=false, joyX=0, joyY=0;
 
 // ── 拖曳視角 ─────────────────────────────
@@ -581,51 +583,52 @@ canvas.addEventListener('mouseup',()=>dragActive=false);
 canvas.addEventListener('mouseleave',()=>dragActive=false);
 
 // ── 輸入：觸控（搖桿 + 視角旋轉分開）────
-const joyBase=document.getElementById('joystick-base');
-const joyZoneRect=()=>document.getElementById('joystick-zone').getBoundingClientRect();
-const knob=document.getElementById('joystick-knob');
+const joyZone = document.getElementById('joystick-zone');
+const joyBaseEl = document.getElementById('joystick-base');
 
-canvas.addEventListener('touchstart',e=>{
+document.addEventListener('touchstart', e=>{
     Array.from(e.changedTouches).forEach(t=>{
-        const jRect=joyZoneRect();
-        const inJoy=t.clientX>=jRect.left&&t.clientX<=jRect.right&&t.clientY>=jRect.top&&t.clientY<=jRect.bottom;
+        const jRect = joyZone.getBoundingClientRect();
+        const inJoy = t.clientX>=jRect.left && t.clientX<=jRect.right &&
+                      t.clientY>=jRect.top  && t.clientY<=jRect.bottom;
+        // 底部角色列不處理
+        const overlay = document.getElementById('overlay').getBoundingClientRect();
+        const inOverlay = t.clientY >= overlay.top;
+        if(inOverlay) return;
+
         if(inJoy){
-            // 搖桿
             if(touchIds.joy===-1){ touchIds.joy=t.identifier; joyActive=true; }
         } else {
-            // 視角旋轉
             if(touchIds.cam===-1){ touchIds.cam=t.identifier; dragActive=true; dragLastX=t.clientX; dragLastY=t.clientY; }
         }
     });
 },{passive:true});
 
-canvas.addEventListener('touchmove',e=>{
+document.addEventListener('touchmove', e=>{
     Array.from(e.changedTouches).forEach(t=>{
         if(t.identifier===touchIds.joy){
-            const r=joyBase.getBoundingClientRect();
-            joyX=(t.clientX-r.left-r.width/2)/55; joyY=(t.clientY-r.top-r.height/2)/55;
+            const r=joyBaseEl.getBoundingClientRect();
+            joyX=(t.clientX-r.left-r.width/2)/55;
+            joyY=(t.clientY-r.top-r.height/2)/55;
             const d=Math.hypot(joyX,joyY); if(d>1){joyX/=d;joyY/=d;}
             knob.style.transform=`translate(${joyX*32}px,${joyY*32}px)`;
         }
-        if(t.identifier===touchIds.cam&&dragActive){
-            camAngle -=(t.clientX-dragLastX)*0.006;
-            camPitch  = Math.max(0.1,Math.min(1.2,camPitch+(t.clientY-dragLastY)*0.004));
+        if(t.identifier===touchIds.cam && dragActive){
+            camAngle -= (t.clientX-dragLastX)*0.006;
+            camPitch   = Math.max(0.1, Math.min(1.2, camPitch+(t.clientY-dragLastY)*0.004));
             dragLastX=t.clientX; dragLastY=t.clientY;
         }
     });
 },{passive:true});
 
-canvas.addEventListener('touchend',e=>{
+document.addEventListener('touchend', e=>{
     Array.from(e.changedTouches).forEach(t=>{
-        if(t.identifier===touchIds.joy){ touchIds.joy=-1; joyActive=false; joyX=joyY=0; knob.style.transform='translate(0,0)'; }
+        if(t.identifier===touchIds.joy){
+            touchIds.joy=-1; joyActive=false; joyX=joyY=0;
+            knob.style.transform='translate(0,0)';
+        }
         if(t.identifier===touchIds.cam){ touchIds.cam=-1; dragActive=false; }
     });
-},{passive:true});
-
-// 搖桿區觸控（讓搖桿優先）
-document.getElementById('joystick-zone').addEventListener('touchstart',e=>{
-    const t=e.touches[0];
-    if(touchIds.joy===-1){ touchIds.joy=t.identifier; joyActive=true; }
 },{passive:true});
 
 // 發射鈕
