@@ -66,6 +66,7 @@ const CONFIG = {
     CHAR_SCALE:     3.5,    // 角色大小
     CHAR_IDLE_IDX:  0,      // 待機動畫 index
     CHAR_RUN_IDX:   1,      // 跑步動畫 index
+    CHAR_MODEL_ROTATE: Math.PI, // ★ 模型朝向修正（PI=背對鏡頭往前，0=面對鏡頭，PI/2=右，-PI/2=左）
     SEG_SCALE:      0.6,    // 蛇身球大小
 
     FOOD_COUNT:     4,      // food_0.glb ～ food_3.glb（改 1 則讀 food.glb）
@@ -164,7 +165,6 @@ buildScene();
 // ── 玩家狀態 ─────────────────────────────────────────────────
 let userId=null, myIdx=0;
 const myGroup=new THREE.Group();
-myGroup.rotation.y = Math.PI; // ★ 初始面向前方（背對攝影機）
 scene.add(myGroup);
 let myMixer=null, myActions={};
 let mySegments=[], myPath=[], mySegCount=0;
@@ -203,6 +203,7 @@ async function loadModel(idx,grp) {
         loader.load(`student_${idx}.glb`, gltf=>{
             const model=gltf.scene;
             model.scale.setScalar(CONFIG.CHAR_SCALE);
+            model.rotation.y = CONFIG.CHAR_MODEL_ROTATE; // ★ 模型朝向修正
             model.traverse(n=>{if(n.isMesh){n.castShadow=true;n.receiveShadow=true;}});
             grp.add(model);
             const mixer=new THREE.AnimationMixer(model), anims=gltf.animations, actions={};
