@@ -421,8 +421,13 @@ async function loadModel(idx,grp){
             if(a[CONFIG.CHAR_RUN_IDX]) ac.run=mixer.clipAction(a[CONFIG.CHAR_RUN_IDX]);
             resolve({mixer,actions:ac});
         },undefined,()=>{
-            const m=new THREE.Mesh(new THREE.BoxGeometry(0.8,1.8,0.8),new THREE.MeshStandardMaterial({color:students[idx].color}));
-            m.position.y=0.9; grp.add(m);
+            // Fallback：有顏色的膠囊人（比紅方塊好看）
+            const color=students[idx].color;
+            const body=new THREE.Mesh(new THREE.CapsuleGeometry?new THREE.CapsuleGeometry(0.4,1.0,4,8):new THREE.CylinderGeometry(0.4,0.4,1.4,8),new THREE.MeshStandardMaterial({color}));
+            body.position.y=1.1; grp.add(body);
+            const head=new THREE.Mesh(new THREE.SphereGeometry(0.38,8,8),new THREE.MeshStandardMaterial({color}));
+            head.position.y=2.1; grp.add(head);
+            const gl=new THREE.PointLight(color,0.6,5); gl.position.y=1.5; grp.add(gl);
             resolve({mixer:null,actions:{}});
         });
     });
@@ -576,8 +581,8 @@ async function initFirebase(){
                 Object.keys(foodMeshes).forEach(id=>{if(!live.has(id)) delFoodMesh(id);});
                 snap.forEach(d=>addFoodMesh(d.id,d.data().x,d.data().z,d.data().t));
                 setStatus('✅ 已連線',`WASD / 搖桿 移動　🍎 ${snap.size}`);
-                // 食物不足時主機補充
-                if(isHost&&snap.size<CONFIG.FOOD_MAX) fillFood();
+                // 食物不足時主機補充（延遲確保 isHost 已設定）
+                if(snap.size<CONFIG.FOOD_MAX) setTimeout(()=>{if(isHost) fillFood();},500);
             });
 
             // ── 監聽玩家（只讀）────────────────────────────
@@ -606,10 +611,17 @@ async function initFirebase(){
             // ── 嘗試成為主機（進入時立刻嘗試）──────────────
             await tryBecomeHost();
 
-            // ── 如果成為主機，設定初始回合時間 ─────────────
+            // ── 如果成為主機，設定初始回合時間並立刻生成食物 ──
             if(isHost){
                 roundEndTime=Date.now()+CONFIG.ROUND_DURATION*1000;
                 await setDoc(doc(db,PATH.session),{roundEnd:roundEndTime},{merge:true});
+                await fillFood(); // ★ 主機確認後立刻補食物
+            } else {
+                // 非主機：從 session 取得回合時間
+                try{
+                    const s=await getDoc(doc(db,PATH.session));
+                    if(s.exists()&&s.data().roundEnd) roundEndTime=s.data().roundEnd;
+                }catch(e){}
             }
 
             // ── 主機心跳：每 3 秒 ───────────────────────────
@@ -618,8 +630,8 @@ async function initFirebase(){
                 else tryBecomeHost(); // 非主機每 3 秒也檢查主機是否存活
             },3000);
 
-            // ── 食物定期補充（只有主機執行）─────────────────
-            setInterval(()=>{if(isHost) fillFood();},15000);
+            // ── 食物定期補充（只有主機，每 8 秒）────────────
+            setInterval(()=>{if(isHost) fillFood();},8000);
 
             // ── 離線清理（只有主機執行）─────────────────────
             setInterval(async()=>{
