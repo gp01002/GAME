@@ -143,7 +143,7 @@ const CONFIG = {
     FOOD_COUNT:          4,       // food_0.glb ~ food_3.glb
     FOOD_USE_GLB:        true,
     FOOD_GLB_SCALE:      1.8,
-    FOOD_MAX:            15,
+    FOOD_MAX:            25,     // ★ 增加食物（人多更有競爭）
     FOOD_EAT_DIST:       2.5,
 
     STEAL_DIST:          1.6,
@@ -221,6 +221,84 @@ function buildScene() {
     if(CONFIG.SKY_IMG) new THREE.TextureLoader().load(CONFIG.SKY_IMG,tex=>{tex.mapping=THREE.EquirectangularReflectionMapping;scene.background=tex;});
 }
 buildScene();
+
+// ── 天氣系統（純粒子，零 Firestore 負荷）────
+const WEATHERS = ['rain','snow','petals','clear'];
+let currentWeather = 'clear';
+let weatherParticles = null;
+let weatherTimer = 0;
+const WEATHER_CHANGE_INTERVAL = 45; // 每 45 秒切換
+
+function clearWeather(){
+    if(weatherParticles){ scene.remove(weatherParticles); weatherParticles=null; }
+}
+
+function startWeather(type){
+    clearWeather();
+    currentWeather=type;
+    if(type==='clear') return;
+
+    const count = type==='rain'?800:type==='snow'?400:300;
+    const geo=new THREE.BufferGeometry();
+    const pos=new Float32Array(count*3);
+    const vel=[];
+
+    for(let i=0;i<count;i++){
+        pos[i*3]  =(Math.random()-.5)*100;
+        pos[i*3+1]= Math.random()*40+5;
+        pos[i*3+2]=(Math.random()-.5)*100;
+        if(type==='rain')   vel.push(new THREE.Vector3((Math.random()-.5)*0.02,-0.6, (Math.random()-.5)*0.02));
+        if(type==='snow')   vel.push(new THREE.Vector3((Math.random()-.5)*0.03,-0.08,(Math.random()-.5)*0.03));
+        if(type==='petals') vel.push(new THREE.Vector3((Math.random()-.5)*0.05,-0.05,(Math.random()-.5)*0.05));
+    }
+    geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+
+    let mat;
+    if(type==='rain')   mat=new THREE.PointsMaterial({color:0xaaccff,size:0.12,transparent:true,opacity:0.6});
+    if(type==='snow')   mat=new THREE.PointsMaterial({color:0xffffff,size:0.3, transparent:true,opacity:0.85});
+    if(type==='petals') mat=new THREE.PointsMaterial({color:0xffaacc,size:0.35,transparent:true,opacity:0.9});
+
+    weatherParticles=new THREE.Points(geo,mat);
+    weatherParticles.userData.vel=vel;
+    weatherParticles.userData.count=count;
+    scene.add(weatherParticles);
+    showWeatherToast(type);
+}
+
+function updateWeather(dt){
+    weatherTimer+=dt;
+    if(weatherTimer>WEATHER_CHANGE_INTERVAL){
+        weatherTimer=0;
+        const next=WEATHERS[Math.floor(Math.random()*WEATHERS.length)];
+        startWeather(next);
+    }
+    if(!weatherParticles) return;
+    const p=weatherParticles.geometry.attributes.position.array;
+    const vel=weatherParticles.userData.vel;
+    const count=weatherParticles.userData.count;
+    for(let i=0;i<count;i++){
+        p[i*3]  +=vel[i].x;
+        p[i*3+1]+=vel[i].y;
+        p[i*3+2]+=vel[i].z;
+        if(currentWeather==='petals'){
+            vel[i].x=Math.sin(Date.now()*0.001+i)*0.04;
+        }
+        if(p[i*3+1]<-1){ // 超出底部重置到頂部
+            p[i*3]  =(Math.random()-.5)*100;
+            p[i*3+1]=40+Math.random()*10;
+            p[i*3+2]=(Math.random()-.5)*100;
+        }
+    }
+    weatherParticles.geometry.attributes.position.needsUpdate=true;
+}
+
+function showWeatherToast(type){
+    const emoji={rain:'🌧️ 下雨了！',snow:'❄️ 下雪了！',petals:'🌸 花瓣飄落！',clear:'☀️ 天氣晴朗'};
+    showFlash(emoji[type]||'');
+}
+
+// 遊戲開始後 10 秒第一次切換天氣
+setTimeout(()=>startWeather(WEATHERS[Math.floor(Math.random()*WEATHERS.length)]),10000);
 
 // ── 玩家 ─────────────────────────────────
 let userId=null, myIdx=0;
@@ -719,27 +797,40 @@ function animate(){
     requestAnimationFrame(animate);
     const dt=clock.getDelta();
     foodBob+=dt*2;
-    updateTimer(); // 回合計時
+    updateTimer();
+    updateWeather(dt); // 天氣粒子
 
     // 回合結束時停止移動
     if(roundOver) { renderer.render(scene,camera); return; }
 
-    // 移動
+    // ── 移動（鍵盤）──────────────────────────
     let spd=0;
-    if(keys['w']||keys['arrowup'])    spd=-CONFIG.MOVE_SPEED;
-    if(keys['s']||keys['arrowdown'])  spd= CONFIG.MOVE_SPEED;
-    if(keys['a']||keys['arrowleft'])  myGroup.rotation.y-=CONFIG.TURN_SPEED;
-    if(keys['d']||keys['arrowright']) myGroup.rotation.y+=CONFIG.TURN_SPEED;
+    if(keys['w']||keys['arrowup'])    spd= CONFIG.MOVE_SPEED;
+    if(keys['s']||keys['arrowdown'])  spd=-CONFIG.MOVE_SPEED;
+    if(keys['a']||keys['arrowleft'])  myGroup.rotation.y+=CONFIG.TURN_SPEED;
+    if(keys['d']||keys['arrowright']) myGroup.rotation.y-=CONFIG.TURN_SPEED;
+
+    if(spd!==0){
+        // 鍵盤：沿角色面向移動
+        myGroup.position.x += Math.sin(myGroup.rotation.y)*spd;
+        myGroup.position.z += Math.cos(myGroup.rotation.y)*spd;
+    }
+
+    // ── 移動（搖桿）──────────────────────────
     if(joyActive){
         const d=Math.hypot(joyX,joyY);
         if(d>0.1){
-            const angle=Math.atan2(joyX,joyY)+camAngle;
-            myGroup.rotation.y=angle;
-            spd=-CONFIG.MOVE_SPEED*d;
+            // 搖桿上=前進，以攝影機方向為基準
+            const worldAngle = Math.atan2(joyX,-joyY) + camAngle;
+            myGroup.rotation.y = worldAngle;
+            const jspd = CONFIG.MOVE_SPEED * d;
+            myGroup.position.x += Math.sin(worldAngle)*jspd;
+            myGroup.position.z += Math.cos(worldAngle)*jspd;
+            spd = jspd; // 讓 moving=true
         }
     }
-    const moving=spd!==0;
-    if(moving) myGroup.translateZ(spd);
+
+    const moving = spd!==0 || (joyActive&&Math.hypot(joyX,joyY)>0.1);
     keys.isMoving=moving;
     if(myMixer){myMixer.update(dt);safeSetRunning(myActions,moving);}
 
