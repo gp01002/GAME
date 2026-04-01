@@ -122,7 +122,7 @@ const APP = 'snake-multi';
 
 // Firestore 路徑
 const PATH = {
-    session:  `artifacts/${APP}/public/data/session`,   // 遊戲房間狀態
+    session:  `artifacts/${APP}/public/data/meta/session`,  // 6段（偶數）✅
     players:  (uid)=>`artifacts/${APP}/public/data/players/${uid}`,
     food:     `artifacts/${APP}/public/data`,            // 食物在這下面的 food collection
 };
