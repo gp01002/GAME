@@ -64,7 +64,31 @@
         /* ── 閃光提示 ── */
         #eat-flash{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);font-size:34px;font-weight:bold;color:#fff;pointer-events:none;z-index:300;opacity:0;transition:opacity 0.15s;text-shadow:0 0 24px #0ff;}
 
-        /* ── 操作提示（電腦）── */
+        /* ── 倒數計時 ── */
+        #timer-ui{
+            position:fixed;top:15px;left:50%;transform:translateX(-50%);
+            color:#fff;font-size:22px;font-weight:bold;
+            background:rgba(5,10,26,0.75);padding:4px 20px;border-radius:20px;
+            border:1px solid rgba(0,242,255,0.4);pointer-events:none;z-index:150;
+            text-shadow:0 0 10px #0ff;letter-spacing:2px;
+        }
+        /* ── 回合結果 ── */
+        #round-result{
+            position:fixed;top:0;left:0;width:100%;height:100%;
+            display:none;flex-direction:column;align-items:center;justify-content:center;
+            background:rgba(0,0,0,0.75);z-index:500;
+            animation:fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+        #round-result .winner-title{font-size:48px;color:#ffee44;text-shadow:0 0 30px #ff0,0 0 60px #ff0;margin-bottom:12px;}
+        #round-result .winner-name{font-size:32px;color:#fff;text-shadow:0 0 20px #0ff;margin-bottom:8px;}
+        #round-result .winner-score{font-size:20px;color:#aaa;margin-bottom:30px;}
+        #round-result .scoreboard{color:#fff;font-size:15px;line-height:2;text-align:center;margin-bottom:24px;}
+        #round-result .next-btn{
+            padding:12px 36px;font-size:18px;border:none;border-radius:30px;
+            background:linear-gradient(135deg,#00f2ff,#0044ff);color:#fff;cursor:pointer;
+            box-shadow:0 0 20px rgba(0,200,255,0.5);
+        }
         #hint-ui{position:fixed;bottom:75px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.4);font-size:10px;pointer-events:none;z-index:150;white-space:nowrap;}
 
         @media (pointer:coarse){
@@ -78,8 +102,18 @@
 <div id="game-container"></div>
 <div id="status-ui">🔄 正在連線...</div>
 <div id="score-ui">🐍 長度：1</div>
+<div id="timer-ui">🕐 3:00</div>
 <div id="eat-flash"></div>
 <div id="hint-ui">WASD 移動 ｜ 空白鍵 發射 ｜ 拖曳 旋轉視角</div>
+
+<!-- 回合結束畫面 -->
+<div id="round-result">
+    <div class="winner-title">🏆 Winner!</div>
+    <div class="winner-name" id="winner-name">—</div>
+    <div class="winner-score" id="winner-score"></div>
+    <div class="scoreboard" id="scoreboard"></div>
+    <button class="next-btn" id="next-btn">再來一局 🔄</button>
+</div>
 
 <div id="joystick-zone"><div id="joystick-base"><div id="joystick-knob"></div></div></div>
 <div id="shoot-btn">🔥</div>
@@ -137,6 +171,7 @@ const firebaseConfig = {
     appId:"1:382312559360:web:744e3b69d23321123939e5"
 };
 const APP_ID = 'snake-multi';
+const ROUND_DURATION = 180; // 秒（3分鐘一局）
 
 const students = [
     {name:"高安妤",color:0xff4444},{name:"饒允志",color:0x44ffff},
@@ -215,6 +250,10 @@ const foodGLBCache={};
 const loader=new GLTFLoader(), keys={};
 const knob=document.getElementById('joystick-knob');
 let joyActive=false, joyX=0, joyY=0;
+
+// ── 回合制 ───────────────────────────────
+let roundEndTime = Date.now() + ROUND_DURATION*1000;
+let roundOver    = false;
 
 // ── 拖曳視角 ─────────────────────────────
 let dragActive=false, dragLastX=0, dragLastY=0;
@@ -478,6 +517,43 @@ async function trySteal(uid){
     }catch(e){}
 }
 
+// ── 回合計時器 ───────────────────────────
+function updateTimer(){
+    if(roundOver) return;
+    const left=Math.max(0,Math.ceil((roundEndTime-Date.now())/1000));
+    const m=String(Math.floor(left/60)).padStart(1,'0');
+    const s=String(left%60).padStart(2,'0');
+    document.getElementById('timer-ui').textContent=`🕐 ${m}:${s}`;
+    if(left<=10) document.getElementById('timer-ui').style.color='#ff4444';
+    else document.getElementById('timer-ui').style.color='#fff';
+    if(left<=0) endRound();
+}
+
+function endRound(){
+    if(roundOver) return;
+    roundOver=true;
+    // 收集分數
+    const all=[{name:students[myIdx].name,score:myTail.length+1,isMe:true}];
+    for(const [,p] of Object.entries(otherPlayers))
+        all.push({name:students[p.idx]?.name??'玩家',score:(p.segCount??0)+1,isMe:false});
+    all.sort((a,b)=>b.score-a.score);
+    const w=all[0];
+    document.getElementById('winner-name').textContent=w.name+(w.isMe?' 🎉（你！）':'');
+    document.getElementById('winner-score').textContent=`🐍 長度：${w.score}`;
+    document.getElementById('scoreboard').innerHTML=
+        all.map((p,i)=>`${['🥇','🥈','🥉'][i]??'　'} ${p.name}　長度 ${p.score}`).join('<br>');
+    document.getElementById('round-result').style.display='flex';
+    document.getElementById('next-btn').onclick=()=>{
+        document.getElementById('round-result').style.display='none';
+        while(myTail.length>0) removeTailSegment();
+        updateScore();
+        myGroup.position.set((Math.random()-.5)*20,0,(Math.random()-.5)*20);
+        myPath=[];
+        roundOver=false;
+        roundEndTime=Date.now()+ROUND_DURATION*1000;
+    };
+}
+
 // ── Firebase ──────────────────────────────
 async function initFirebase(){
     try{
@@ -643,20 +719,23 @@ function animate(){
     requestAnimationFrame(animate);
     const dt=clock.getDelta();
     foodBob+=dt*2;
+    updateTimer(); // 回合計時
+
+    // 回合結束時停止移動
+    if(roundOver) { renderer.render(scene,camera); return; }
 
     // 移動
     let spd=0;
-    if(keys['w']||keys['arrowup'])    spd= CONFIG.MOVE_SPEED;
-    if(keys['s']||keys['arrowdown'])  spd=-CONFIG.MOVE_SPEED;
-    if(keys['a']||keys['arrowleft'])  myGroup.rotation.y+=CONFIG.TURN_SPEED;
-    if(keys['d']||keys['arrowright']) myGroup.rotation.y-=CONFIG.TURN_SPEED;
+    if(keys['w']||keys['arrowup'])    spd=-CONFIG.MOVE_SPEED;
+    if(keys['s']||keys['arrowdown'])  spd= CONFIG.MOVE_SPEED;
+    if(keys['a']||keys['arrowleft'])  myGroup.rotation.y-=CONFIG.TURN_SPEED;
+    if(keys['d']||keys['arrowright']) myGroup.rotation.y+=CONFIG.TURN_SPEED;
     if(joyActive){
         const d=Math.hypot(joyX,joyY);
         if(d>0.1){
-            // 搖桿方向疊加攝影機角度
             const angle=Math.atan2(joyX,joyY)+camAngle;
-            myGroup.rotation.y=angle+Math.PI;
-            spd=CONFIG.MOVE_SPEED*d;
+            myGroup.rotation.y=angle;
+            spd=-CONFIG.MOVE_SPEED*d;
         }
     }
     const moving=spd!==0;
