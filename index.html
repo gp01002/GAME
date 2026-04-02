@@ -136,8 +136,8 @@ const students = [
     {name:"金煜喬",color:0xaa8866},{name:"陳品霖",color:0x888888},
     {name:"許博勛",color:0xffaa00},{name:"陳湘妮",color:0xffeeee},
     {name:"劉奕汝",color:0xffcccc},{name:"蔡明樺",color:0xccccff},
-    {name:"鍾凱羽",color:0xccffcc},{name:"學員18",color:0x445566},
-    {name:"學員19",color:0x556677},{name:"學員20",color:0x667788}
+    {name:"鍾凱羽",color:0xccffcc},{name:"葉子菱",color:0x445566},
+    {name:"林子婷",color:0x556677},{name:"🔗遊戲連結",color:0x00f2ff}
 ];
 const FOOD_COLORS=[0xff3333,0x33ff66,0xffff33,0xff33ff,0x33ffff,0xff8800,0xffffff,0x00aaff,0xff6699];
 
@@ -461,6 +461,12 @@ function setSegCount(segArr,count,color){
 }
 
 // ════════════════════════════════════════
+//  畫面震動
+// ════════════════════════════════════════
+let shakeAmount=0;
+function screenShake(intensity=0.3){ shakeAmount=Math.max(shakeAmount,intensity); }
+
+// ════════════════════════════════════════
 //  特效
 // ════════════════════════════════════════
 function spawnParticles(pos,color=0xff4400){
@@ -595,7 +601,14 @@ async function initFirebase(){
                         if(typeof d.segCount==='number'&&d.segCount<myTail.length){
                             const lost=myTail.length-d.segCount;
                             for(let i=0;i<lost;i++) removeTail();
-                            showFlash(`💀 -${lost}`); updateScore();
+                            showFlash(`💀 被打中！ -${lost}`);
+                            updateScore();
+                            screenShake(0.5); // ★ 被打到震動更強
+                            // ★ 紅色閃屏
+                            const flash=document.createElement('div');
+                            flash.style.cssText='position:fixed;inset:0;background:rgba(255,0,0,0.35);z-index:999;pointer-events:none;transition:opacity 0.4s';
+                            document.body.appendChild(flash);
+                            setTimeout(()=>{flash.style.opacity=0;setTimeout(()=>flash.remove(),400);},50);
                         }
                         return;
                     }
@@ -817,10 +830,33 @@ function animate(){
         let hit=false;
         for(const [uid,p] of Object.entries(others)){
             if(b.mesh.position.distanceTo(p.g.position)<CONFIG.BULLET_HIT_DIST){
-                spawnParticles(b.mesh.position.clone(),0xff4400);
+                const hitPos=b.mesh.position.clone();
+                // ★ 爆炸粒子（大）
+                spawnParticles(hitPos, 0xff4400);
+                spawnParticles(hitPos, students[p.idx??0]?.color??0xffffff);
                 scene.remove(b.mesh); bullets.splice(i,1); hit=true;
-                if(db) setDoc(doc(db,PATH.players(uid)),{segCount:Math.max(0,(p.segCount??1)-2)},{merge:true}).catch(()=>{});
-                showFlash('💥 命中！'); break;
+
+                // ★ 被打掉的食物掉落到地上，可被撿起
+                const lostCount = Math.min(3, p.segCount??0);
+                for(let k=0;k<lostCount;k++){
+                    const foodType=Math.floor(Math.random()*CONFIG.FOOD_COUNT);
+                    const offset=new THREE.Vector3((Math.random()-.5)*4,0,(Math.random()-.5)*4);
+                    const dropPos=hitPos.clone().add(offset);
+                    if(db) addDoc(collection(db,'artifacts',APP,'public','data','food'),{
+                        x:dropPos.x, z:dropPos.z, t:foodType
+                    }).catch(()=>{});
+                }
+
+                // ★ 扣對方 segCount
+                if(db) setDoc(doc(db,PATH.players(uid)),{
+                    segCount:Math.max(0,(p.segCount??0)-3)
+                },{merge:true}).catch(()=>{});
+
+                showFlash('💥 命中！ -3');
+
+                // ★ 畫面震動（攻擊方）
+                screenShake(0.3);
+                break;
             }
         }
         if(!hit&&b.life<=0){scene.remove(b.mesh);bullets.splice(i,1);}
@@ -842,11 +878,14 @@ function animate(){
         p.segments.forEach((s,i)=>{const st=(i+1)*CONFIG.SEG_SPACING;if(p.path[st]) s.position.lerp(p.path[st].pos,0.4);});
     }
 
-    // 攝影機
+    // 攝影機（含震動）
     const cx=myGroup.position.x+Math.sin(camAngle)*CAM_DIST*Math.cos(camPitch);
     const cy=myGroup.position.y+Math.sin(camPitch)*CAM_DIST+CAM_H*0.3;
     const cz=myGroup.position.z+Math.cos(camAngle)*CAM_DIST*Math.cos(camPitch);
-    camera.position.lerp(new THREE.Vector3(cx,cy,cz),0.1);
+    const shakeX=(Math.random()-.5)*shakeAmount;
+    const shakeY=(Math.random()-.5)*shakeAmount;
+    shakeAmount*=0.85; // 震動衰減
+    camera.position.lerp(new THREE.Vector3(cx+shakeX,cy+shakeY,cz),0.1);
     camera.lookAt(myGroup.position.x,1.5,myGroup.position.z);
     renderer.render(scene,camera);
 }
@@ -861,7 +900,14 @@ function initUI(){
         c.className='character-card'; c.id=`card-${i}`;
         const hex=new THREE.Color(s.color).getHexString();
         c.innerHTML=`<div class="character-icon" style="background-color:#${hex};background-image:url('icon_${i}.jpg')"></div><div class="character-name">${s.name}</div>`;
-        c.onclick=()=>switchChar(i);
+        if(i===19){
+            // 第20個卡片點擊開啟遊戲連結
+            c.onclick=()=>window.open('https://gp01002.github.io/GAME/','_blank');
+            c.style.borderColor='#00f2ff';
+            c.style.background='rgba(0,242,255,0.1)';
+        } else {
+            c.onclick=()=>switchChar(i);
+        }
         grid.appendChild(c);
     });
 }
