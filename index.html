@@ -133,7 +133,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRButton }   from 'three/addons/webxr/VRButton.js';
 import { initializeApp }   from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+import { getAuth, signInAnonymously, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, getDocs, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
 // ════════════════════════════════════════
@@ -823,7 +823,8 @@ async function trySteal(uid){
 async function initFirebase(){
     try{
         const app=initializeApp(FB);
-        const auth=getAuth(app);
+        window._fbAuth=getAuth(app);
+        const auth=window._fbAuth;
         db=getFirestore(app);
         setStatus('🔄 連線中...');
         await signInAnonymously(auth);
@@ -1084,35 +1085,38 @@ function buildGallery(){
         const angle = (i / students.length) * Math.PI * 2;
         const px    = Math.cos(angle) * GALLERY_RADIUS;
         const pz    = Math.sin(angle) * GALLERY_RADIUS;
-        const py    = getTerrainHeight(px, pz) + 2.6;
+        const py    = getTerrainHeight(px, pz) + 3.2;
 
-        // ── 外框 ──────────────────────────
+        // ── 外框（放大）────────────────────
         const frame = new THREE.Mesh(
-            new THREE.BoxGeometry(2.8, 3.6, 0.14),
+            new THREE.BoxGeometry(4.2, 5.2, 0.14),
             new THREE.MeshLambertMaterial({color:0xddbb77})
         );
 
-        // ── 海報面 ─────────────────────────
+        // ── 海報面（放大）──────────────────
         const cardMat = new THREE.MeshBasicMaterial({color:new THREE.Color(art.color)});
-        const card    = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 3.1), cardMat);
+        const card    = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 4.8), cardMat);
         card.position.z = 0.08;
         // 用 fetch 確認檔案存在後再載入（解決 404 靜默失敗問題）
-        (async ()=>{
-            const candidates=[`gallery_${i}.png`,`gallery_${i}.jpg`,`gallery_ ${i}.png`,`gallery_ ${i}.jpg`];
-            for(const url of candidates){
-                try{
-                    const res=await fetch(url,{method:'HEAD'});
-                    if(res.ok){
-                        texLoader.load(url,tex=>{
-                            cardMat.map=tex;
-                            cardMat.color.set(0xffffff);
-                            cardMat.needsUpdate=true;
-                        });
-                        break;
-                    }
-                }catch(e){}
-            }
-        })();
+        // 只嘗試載入 0-18 範圍的圖，超出範圍顯示彩色卡片
+        if(i <= 18){
+            (async ()=>{
+                const candidates=[`gallery_${i}.png`,`gallery_${i}.jpg`];
+                for(const url of candidates){
+                    try{
+                        const res=await fetch(url,{method:'HEAD'});
+                        if(res.ok){
+                            texLoader.load(url,tex=>{
+                                cardMat.map=tex;
+                                cardMat.color.set(0xffffff);
+                                cardMat.needsUpdate=true;
+                            });
+                            break;
+                        }
+                    }catch(e){}
+                }
+            })();
+        }
 
         // ── 姓名標籤 ─────────────────────
         const nc = document.createElement('canvas');
@@ -1125,10 +1129,10 @@ function buildGallery(){
         nctx.textAlign='center';
         nctx.fillText(`${i+1}. ${art.name}`, 256, 58);
         const label = new THREE.Mesh(
-            new THREE.PlaneGeometry(2.4,0.4),
+            new THREE.PlaneGeometry(3.8,0.55),
             new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(nc),transparent:true})
         );
-        label.position.set(0,-1.85,0.09);
+        label.position.set(0,-2.65,0.09);
 
         const pGroup = new THREE.Group();
         pGroup.add(frame); pGroup.add(card); pGroup.add(label);
@@ -1156,12 +1160,8 @@ function buildGallery(){
             model.scale.setScalar(CONFIG.CHAR_SCALE);
             model.rotation.y = CONFIG.CHAR_MODEL_ROTATE;
             charGroup.add(model);
-            // 播放 idle 動畫
-            if(gltf.animations[CONFIG.CHAR_IDLE_IDX]){
-                const mx = new THREE.AnimationMixer(model);
-                mx.clipAction(gltf.animations[CONFIG.CHAR_IDLE_IDX]).play();
-                charGroup.userData.mixer = mx;
-            }
+            // ★ 藝廊角色靜態展示（不播動畫，省效能）
+            // 不設 mixer，只顯示靜態模型
         }, undefined, ()=>{
             // fallback 膠囊人
             const body=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,1.4,8),new THREE.MeshLambertMaterial({color:art.color}));
@@ -1278,21 +1278,27 @@ function toggleMode(){
         // 隱藏遊戲格線
         scene.traverse(o=>{ if(o.isGridHelper) o.visible=false; });
         // 換天空
+        // sky2.jpg 若存在就用，否則用深藍夜空色
         new THREE.TextureLoader().load('sky2.jpg', t=>{
             t.mapping=THREE.EquirectangularReflectionMapping;
             scene.background=t;
         }, undefined, ()=>{
-            scene.background=new THREE.Color(0x1a1a2e);
+            scene.background=new THREE.Color(0x0a0a1e);
         });
-        scene.fog = new THREE.Fog(0x2a2a3e, 45, 130);
+        scene.fog = new THREE.Fog(0x0a0a1e, 50, 140);
+        // 藝廊專用柔和燈光
+        scene.children.filter(o=>o.isAmbientLight).forEach(l=>{ l.intensity=1.8; });
         myGroup.position.set(0,0,8);
         showFlash('🖼️ 歡迎來到虛擬藝廊！');
-        // ★ 藝廊模式斷開即時同步，釋放效能
-        if(typeof unsubFood === 'function'){ unsubFood(); unsubFood=null; }
-        if(typeof unsubPlayers === 'function'){ unsubPlayers(); unsubPlayers=null; }
-        // 清除其他玩家顯示
+        // ★ 完全登出 Firebase，釋放所有連線資源
+        if(typeof unsubFood==='function'){unsubFood();unsubFood=null;}
+        if(typeof unsubPlayers==='function'){unsubPlayers();unsubPlayers=null;}
         Object.keys(others).forEach(uid=>removeOther(uid));
-        setStatus('🖼️ 藝廊模式','（已暫停連線）');
+        Object.keys(foodMeshes).forEach(id=>delFoodMesh(id));
+        if(window._fbAuth) signOut(window._fbAuth).catch(()=>{});
+        userId=null; isHost=false;
+        document.getElementById('host-badge').style.display='none';
+        setStatus('🖼️ 藝廊模式','（離線）');
     } else {
         if(gameFloorMesh) gameFloorMesh.visible = true; // ★ 還原草地
         // 還原食物 mesh 可見
@@ -1305,33 +1311,39 @@ function toggleMode(){
         });
         scene.fog = new THREE.Fog(0x87ceeb, 55, 140);
         showFlash('🎮 回到遊戲！');
-        // ★ 重新連接 Firestore
-        if(db && !unsubFood){
-            const foodCol2=collection(db,'artifacts',APP,'public','data','food');
-            const playersCol2=collection(db,'artifacts',APP,'public','data','players');
-            unsubFood=onSnapshot(foodCol2,snap=>{
-                const live=new Set(snap.docs.map(d=>d.id));
-                Object.keys(foodMeshes).forEach(id=>{if(!live.has(id)) delFoodMesh(id);});
-                snap.forEach(d=>addFoodMesh(d.id,d.data().x,d.data().z,d.data().t));
-                setStatus('✅ 已連線',`WASD / 搖桿 移動　🍎 ${snap.size}`);
-            });
-            unsubPlayers=onSnapshot(playersCol2,snap=>{
-                const liveIds=new Set(snap.docs.map(d=>d.id));
-                snap.forEach(async dSnap=>{
-                    const data=dSnap.data(), uid=dSnap.id;
-                    if(uid===userId){
-                        if(typeof data.segCount==='number'&&data.segCount<myTail.length){
-                            const lost=myTail.length-data.segCount;
-                            for(let i=0;i<lost;i++) removeTail();
-                            showFlash(`💀 被打中！ -${lost}`); updateScore(); screenShake(0.5);
-                        }
-                        return;
-                    }
-                    handleOther(uid,data);
+        // ★ 重新匿名登入並恢復 Firestore 監聽
+        setStatus('🔄 重新連線中...');
+        if(window._fbAuth && db){
+            signInAnonymously(window._fbAuth).then(cred=>{
+                userId=cred.user.uid;
+                setStatus('✅ 已連線','WASD / 搖桿 移動');
+                foodColRef=collection(db,'artifacts',APP,'public','data','food');
+                const pCol=collection(db,'artifacts',APP,'public','data','players');
+                unsubFood=onSnapshot(foodColRef,snap=>{
+                    const live=new Set(snap.docs.map(d=>d.id));
+                    Object.keys(foodMeshes).forEach(id=>{if(!live.has(id)) delFoodMesh(id);});
+                    snap.forEach(d=>addFoodMesh(d.id,d.data().x,d.data().z,d.data().t));
+                    setStatus('✅ 已連線',`WASD / 搖桿 移動　🍎 ${snap.size}`);
                 });
-                Object.keys(others).forEach(uid=>{if(!liveIds.has(uid)) removeOther(uid);});
-                updateCardUI(snap.docs.map(d=>d.data().idx));
-            });
+                unsubPlayers=onSnapshot(pCol,snap=>{
+                    const liveIds=new Set(snap.docs.map(d=>d.id));
+                    snap.forEach(async dSnap=>{
+                        const data=dSnap.data(),uid=dSnap.id;
+                        if(uid===userId){
+                            if(typeof data.segCount==='number'&&data.segCount<myTail.length){
+                                const lost=myTail.length-data.segCount;
+                                for(let i=0;i<lost;i++) removeTail();
+                                showFlash(`💀 被打中！-${lost}`);updateScore();screenShake(0.5);
+                            }
+                            return;
+                        }
+                        handleOther(uid,data);
+                    });
+                    Object.keys(others).forEach(uid=>{if(!liveIds.has(uid)) removeOther(uid);});
+                    updateCardUI(snap.docs.map(d=>d.data().idx));
+                });
+                tryBecomeHost();
+            }).catch(e=>setStatus('⚠️ 連線失敗',e.message));
         }
     }
 }
@@ -1390,8 +1402,7 @@ function animate(){
     tickWeather(dt);
     // 藝廊模式：遊戲完全停止，只跑藝廊邏輯
     if(galleryMode){
-        // 只更新可見的 mixer（減少效能負擔）
-        galleryObjects.forEach(o=>{ if(o.visible&&o.userData?.mixer) o.userData.mixer.update(dt); });
+        // 藝廊角色已靜態展示，無需 mixer 更新
         let gs=0;
         if(keys['w']||keys['arrowup'])    gs= 0.14;
         if(keys['s']||keys['arrowdown'])  gs=-0.14;
