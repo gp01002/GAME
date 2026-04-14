@@ -160,37 +160,24 @@ renderer.shadowMap.enabled = false;
 renderer.xr.enabled = true; // ★ 開啟 WebXR VR
 document.getElementById('game-container').appendChild(renderer.domElement);
 
-// ── 地形高度函式（用三角函數模擬自然起伏）──
-function terrainY(x,z){
-    return Math.sin(x*0.08)*1.5 + Math.cos(z*0.07)*1.2
-         + Math.sin(x*0.2+z*0.15)*0.6
-         + Math.cos(x*0.05-z*0.09)*1.8;
-}
-
-// 地形頂點快取（供食物高度使用）
-const terrainGeo = new THREE.PlaneGeometry(300,300,80,80);
-
 function buildScene(){
     scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.Fog(0x87ceeb, 50, 130);
+    scene.fog = new THREE.Fog(0x87ceeb, 55, 140);
 
-    // ── 地形（起伏地面）────────────────────────
-    const pos = terrainGeo.attributes.position;
-    for(let i=0;i<pos.count;i++){
-        const x=pos.getX(i), z=pos.getZ(i);
-        // 遊戲場地中央保持平坦
-        const distFromCenter=Math.sqrt(x*x+z*z);
-        const flatness=Math.max(0, 1-Math.max(0,(distFromCenter-20)/25));
-        pos.setY(i, terrainY(x,z)*(1-flatness));
-    }
-    terrainGeo.computeVertexNormals();
-    const floorTex = new THREE.TextureLoader().load('forest/textures/Floor_baseColor.jpeg');
-    floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
-    floorTex.repeat.set(15,15);
-    const floor = new THREE.Mesh(terrainGeo,
-        new THREE.MeshLambertMaterial({map:floorTex}));
+    // ── 草地地板（穩定顯示，有貼圖就用貼圖否則用純色）──
+    const floorGeo = new THREE.PlaneGeometry(400,400,1,1);
+    const floorMat = new THREE.MeshLambertMaterial({color:0x6dbf5a});
+    const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI/2;
+    floor.position.y = -0.01;
     scene.add(floor);
+    // 嘗試載入貼圖（失敗就維持綠色）
+    new THREE.TextureLoader().load('forest/textures/Floor_baseColor.jpeg', tex=>{
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(18,18);
+        floorMat.map = tex;
+        floorMat.needsUpdate = true;
+    });
 
     // ── 河流 ────────────────────────────────────
     addRiver();
@@ -971,6 +958,11 @@ function animate(){
     const moving=spd!==0||joyMoved;
     keys.isMoving=moving;
     if(myMixer){myMixer.update(dt);safeAnim(myActions,moving);}
+
+    // ★ 場地邊界限制（不能跑出去）
+    const BOUND = CONFIG.FIELD_SIZE - 1;
+    myGroup.position.x = Math.max(-BOUND, Math.min(BOUND, myGroup.position.x));
+    myGroup.position.z = Math.max(-BOUND, Math.min(BOUND, myGroup.position.z));
 
     // ★ 碰撞推回（樹木、石頭阻擋）
     const PLAYER_R=0.7;
