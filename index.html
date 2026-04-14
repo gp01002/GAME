@@ -149,71 +149,66 @@ const FOOD_COLORS=[0xff3333,0x33ff66,0xffff33,0xff33ff,0x33ffff,0xff8800,0xfffff
 // ════════════════════════════════════════
 const scene    = new THREE.Scene();
 const camera   = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setPixelRatio(devicePixelRatio);
+const renderer = new THREE.WebGLRenderer({antialias:false}); // ★ 關抗鋸齒提速
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); // ★ 限制最高 1.5x
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = false; // ★ 關陰影大幅提速
 document.getElementById('game-container').appendChild(renderer.domElement);
 
 function buildScene(){
     scene.background = new THREE.Color(0x87ceeb);
     scene.fog = new THREE.Fog(0x87ceeb, 40, 120);
 
-    // 星星（夜晚效果備用）
+    // 星星（減少數量）
     const sp=[], sg=new THREE.BufferGeometry();
-    for(let i=0;i<1500;i++) sp.push((Math.random()-.5)*400,Math.random()*80+15,(Math.random()-.5)*400);
+    for(let i=0;i<800;i++) sp.push((Math.random()-.5)*400,Math.random()*80+15,(Math.random()-.5)*400);
     sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
     scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:0.2,transparent:true,opacity:0.5})));
 
-    // ── 繽紛地面 ─────────────────────────────────
-    // 主地板（草地綠）
+    // 地板（草地綠貼圖）
     const floorTex = new THREE.TextureLoader().load('forest/textures/Floor_baseColor.jpeg');
     floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
-    floorTex.repeat.set(20, 20);
+    floorTex.repeat.set(12, 12);
     const floor=new THREE.Mesh(
-        new THREE.PlaneGeometry(500,500),
-        new THREE.MeshStandardMaterial({map:floorTex, roughness:0.9, metalness:0})
+        new THREE.PlaneGeometry(300,300),
+        new THREE.MeshLambertMaterial({map:floorTex}) // ★ Lambert 比 Standard 快
     );
-    floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
+    floor.rotation.x=-Math.PI/2; scene.add(floor);
 
-    // 彩色地面裝飾圓圈（繽紛感）
-    const patchColors=[0x88dd44,0x44cc88,0xddcc22,0xff8844,0x44aaff,0xee44aa,0x88ffcc];
-    for(let i=0;i<30;i++){
+    // 彩色地面圓圈裝飾（減少數量）
+    const patchColors=[0x88dd44,0x44cc88,0xddcc22,0xff8844,0x44aaff,0xee44aa];
+    for(let i=0;i<16;i++){
         const c=patchColors[i%patchColors.length];
-        const r=2+Math.random()*4;
         const patch=new THREE.Mesh(
-            new THREE.CircleGeometry(r,16),
-            new THREE.MeshStandardMaterial({color:c,transparent:true,opacity:0.25,roughness:1})
+            new THREE.CircleGeometry(2+Math.random()*3,8),
+            new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.2}) // ★ Basic 最快
         );
         patch.rotation.x=-Math.PI/2;
-        patch.position.set((Math.random()-.5)*160,0.02,(Math.random()-.5)*160);
+        patch.position.set((Math.random()-.5)*120,0.02,(Math.random()-.5)*120);
         scene.add(patch);
     }
 
-    // 格線（淡一點）
-    const grid=new THREE.GridHelper(500,80,0x44aa44,0x228822);
-    grid.material.transparent=true; grid.material.opacity=0.2;
+    // 淡格線
+    const grid=new THREE.GridHelper(300,60,0x44aa44,0x228822);
+    grid.material.transparent=true; grid.material.opacity=0.15;
     grid.position.y=0.03; scene.add(grid);
 
-    // ── 燈光 ──────────────────────────────────────
-    scene.add(new THREE.AmbientLight(0xffffff,2.0));
-    const sun=new THREE.DirectionalLight(0xfffacc,3.5);
-    sun.position.set(30,60,30); sun.castShadow=true;
-    sun.shadow.mapSize.width=2048; sun.shadow.mapSize.height=2048;
+    // 燈光（簡化）
+    scene.add(new THREE.AmbientLight(0xffffff,2.2));
+    const sun=new THREE.DirectionalLight(0xfffacc,2.5);
+    sun.position.set(30,60,30); sun.castShadow=false; // ★ 關陰影
     scene.add(sun);
-    // 天空藍補光
-    const skyLight=new THREE.HemisphereLight(0x87ceeb,0x44aa44,1.2);
-    scene.add(skyLight);
+    scene.add(new THREE.HemisphereLight(0x87ceeb,0x44aa44,1.0));
 
-    // ── 邊界柱（花朵色）──────────────────────────
+    // 邊界柱（彩色）
     const pillarColors=[0xff4488,0x44ffaa,0xffdd44,0x44aaff];
     [[-1,1],[1,1],[1,-1],[-1,-1]].forEach(([sx,sz],i)=>{
         const c=pillarColors[i];
-        const pm=new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:0.6,transparent:true,opacity:0.6});
-        const p=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.2,8,8),pm);
+        const pm=new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.7});
+        const p=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.2,8,6),pm);
         p.position.set(sx*CONFIG.FIELD_SIZE,3,sz*CONFIG.FIELD_SIZE); scene.add(p);
-        const pl=new THREE.PointLight(c,2,15); pl.position.set(sx*CONFIG.FIELD_SIZE,8,sz*CONFIG.FIELD_SIZE); scene.add(pl);
+        const pl=new THREE.PointLight(c,1.5,12); pl.position.set(sx*CONFIG.FIELD_SIZE,8,sz*CONFIG.FIELD_SIZE); scene.add(pl);
     });
 
     // ── 天空背景 ─────────────────────────────────
@@ -244,7 +239,7 @@ function startWeather(type){
     if(wxParticles){scene.remove(wxParticles);wxParticles=null;}
     wxType=type;
     if(type==='clear'){showFlash('☀️ 天氣晴朗');return;}
-    const n=type==='rain'?800:400;
+    const n=type==='rain'?400:200; // ★ 減少粒子數
     const pos=new Float32Array(n*3), vel=[];
     for(let i=0;i<n;i++){
         pos[i*3]=(Math.random()-.5)*100; pos[i*3+1]=Math.random()*40+5; pos[i*3+2]=(Math.random()-.5)*100;
@@ -308,39 +303,32 @@ let joyActive=false, joyX=0, joyY=0;
 
 // ── 森林地形（loader 宣告後才能呼叫）────────
 loader.load('forest/scene.gltf', gltf=>{
+    // ★ 森林場景太大會擋住遊戲，只取部分樹木放邊界
     const forest=gltf.scene;
-
-    // ── 自動計算場景邊界，縮放到合適大小 ──
     const box=new THREE.Box3().setFromObject(forest);
     const size=new THREE.Vector3(); box.getSize(size);
+    const maxDim=Math.max(size.x,size.z);
+    // 縮到 field 邊框大小的裝飾用途
+    const scale=(CONFIG.FIELD_SIZE*0.8)/maxDim;
+    forest.scale.setScalar(scale);
     const center=new THREE.Vector3(); box.getCenter(center);
-    console.log('[Scene] 森林原始大小:', size, '中心:', center);
-
-    // 目標：讓場景寬度約 200，剛好包圍遊戲場地
-    const targetSize=200;
-    const maxDim=Math.max(size.x, size.z);
-    const scaleFactor= maxDim>0 ? targetSize/maxDim : 0.1;
-    forest.scale.setScalar(scaleFactor);
-
-    // 置中並放到地面
-    forest.position.set(
-        -center.x * scaleFactor,
-        -box.min.y * scaleFactor,   // 底部貼地
-        -center.z * scaleFactor
-    );
-
+    // 放到場地外圍（偏移到邊界外）
+    forest.position.set(-center.x*scale, -box.min.y*scale, -(CONFIG.FIELD_SIZE+20));
     forest.traverse(n=>{
         if(n.isMesh){
-            n.castShadow=true;
-            n.receiveShadow=true;
-            // 確保材質雙面可見
-            if(n.material) n.material.side=THREE.DoubleSide;
+            n.castShadow=false; // ★ 關陰影提速
+            n.receiveShadow=false;
+            if(n.material) n.material.side=THREE.FrontSide;
         }
     });
-    scene.add(forest);
-    console.log('[Scene] ✅ 森林載入，縮放比例:', scaleFactor.toFixed(4));
+    // 4個方向各放一個
+    [0,1,2,3].forEach(i=>{
+        const clone=forest.clone();
+        clone.rotation.y=i*Math.PI/2;
+        scene.add(clone);
+    });
+    console.log('[Scene] ✅ 邊界森林載入');
 }, undefined, ()=>{
-    console.warn('[Scene] scene.gltf 未找到，使用簡單植被');
     addSimpleVegetation();
 });
 let dragActive=false, dragLastX=0, dragLastY=0;
@@ -892,7 +880,7 @@ function animate(){
 
     // 路徑 & 尾巴
     myPath.unshift({pos:myGroup.position.clone()});
-    if(myPath.length>500) myPath.pop();
+    if(myPath.length>200) myPath.pop(); // ★ 從500減到200
     myTail.forEach((s,i)=>{
         const st=(i+1)*CONFIG.SEG_SPACING;
         if(myPath[st]){
@@ -970,7 +958,7 @@ function animate(){
         if(p.mixer){p.mixer.update(dt);safeAnim(p.actions,p.remoteMoving);}
         p.path=p.path||[];
         p.path.unshift({pos:p.g.position.clone()});
-        if(p.path.length>500) p.path.pop();
+        if(p.path.length>200) p.path.pop(); // ★ 優化
         p.segments.forEach((s,i)=>{const st=(i+1)*CONFIG.SEG_SPACING;if(p.path[st]) s.position.lerp(p.path[st].pos,0.4);});
     }
 
