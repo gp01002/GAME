@@ -245,7 +245,15 @@ function buildScene(){
     });
 }
 
-// ── 水窪（隨機散布在場地中）─────────────────────
+// ── 水窪（用 ShapeGeometry 橢圓）────────────────
+function makePuddleGeo(rx, rz, segs=20){
+    // Three.js 正確建立橢圓的方式：EllipseCurve → Shape → ShapeGeometry
+    const curve = new THREE.EllipseCurve(0,0, rx,rz, 0, Math.PI*2, false, 0);
+    const pts   = curve.getPoints(segs);
+    const shape = new THREE.Shape(pts);
+    return new THREE.ShapeGeometry(shape);
+}
+
 function addRiver(){
     const puddleConfigs = [
         {x: 8,  z:-12, rx:4.5, rz:3.0},
@@ -260,24 +268,21 @@ function addRiver(){
     const puddleColors=[0x44aaee,0x3399dd,0x55bbff,0x2288cc];
     puddleConfigs.forEach(({x,z,rx,rz},i)=>{
         const color=puddleColors[i%puddleColors.length];
-        const mat=new THREE.MeshBasicMaterial({color,transparent:true,opacity:0.6,side:THREE.DoubleSide});
-        // 橢圓水窪
-        const geo=new THREE.EllipseGeometry(rx,rz,20);
-        const mesh=new THREE.Mesh(geo,mat);
-        mesh.rotation.x=-Math.PI/2;
-        mesh.position.set(x,0.07,z);
-        scene.add(mesh);
-        // 水面反光點光
+        // 邊緣（稍大、半透明深色）
+        const edgeMesh=new THREE.Mesh(
+            makePuddleGeo(rx+0.6,rz+0.6),
+            new THREE.MeshBasicMaterial({color:0x226688,transparent:true,opacity:0.3,side:THREE.DoubleSide})
+        );
+        edgeMesh.rotation.x=-Math.PI/2; edgeMesh.position.set(x,0.05,z); scene.add(edgeMesh);
+        // 主水窪
+        const mesh=new THREE.Mesh(
+            makePuddleGeo(rx,rz),
+            new THREE.MeshBasicMaterial({color,transparent:true,opacity:0.65,side:THREE.DoubleSide})
+        );
+        mesh.rotation.x=-Math.PI/2; mesh.position.set(x,0.07,z); scene.add(mesh);
+        // 反光
         const light=new THREE.PointLight(color,1.0,rx*3.5);
-        light.position.set(x,0.5,z);
-        scene.add(light);
-        // 水窪邊緣稍暗
-        const edgeMat=new THREE.MeshBasicMaterial({color:0x226688,transparent:true,opacity:0.3,side:THREE.DoubleSide});
-        const edgeGeo=new THREE.EllipseGeometry(rx+0.5,rz+0.5,20);
-        const edge=new THREE.Mesh(edgeGeo,edgeMat);
-        edge.rotation.x=-Math.PI/2;
-        edge.position.set(x,0.05,z);
-        scene.add(edge);
+        light.position.set(x,0.5,z); scene.add(light);
     });
 }
 buildScene();
