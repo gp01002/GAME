@@ -309,11 +309,36 @@ let joyActive=false, joyX=0, joyY=0;
 // ── 森林地形（loader 宣告後才能呼叫）────────
 loader.load('forest/scene.gltf', gltf=>{
     const forest=gltf.scene;
-    forest.scale.setScalar(0.08);
-    forest.position.set(0,-0.5,0);
-    forest.traverse(n=>{if(n.isMesh){n.castShadow=true;n.receiveShadow=true;}});
+
+    // ── 自動計算場景邊界，縮放到合適大小 ──
+    const box=new THREE.Box3().setFromObject(forest);
+    const size=new THREE.Vector3(); box.getSize(size);
+    const center=new THREE.Vector3(); box.getCenter(center);
+    console.log('[Scene] 森林原始大小:', size, '中心:', center);
+
+    // 目標：讓場景寬度約 200，剛好包圍遊戲場地
+    const targetSize=200;
+    const maxDim=Math.max(size.x, size.z);
+    const scaleFactor= maxDim>0 ? targetSize/maxDim : 0.1;
+    forest.scale.setScalar(scaleFactor);
+
+    // 置中並放到地面
+    forest.position.set(
+        -center.x * scaleFactor,
+        -box.min.y * scaleFactor,   // 底部貼地
+        -center.z * scaleFactor
+    );
+
+    forest.traverse(n=>{
+        if(n.isMesh){
+            n.castShadow=true;
+            n.receiveShadow=true;
+            // 確保材質雙面可見
+            if(n.material) n.material.side=THREE.DoubleSide;
+        }
+    });
     scene.add(forest);
-    console.log('[Scene] ✅ 森林地形載入成功');
+    console.log('[Scene] ✅ 森林載入，縮放比例:', scaleFactor.toFixed(4));
 }, undefined, ()=>{
     console.warn('[Scene] scene.gltf 未找到，使用簡單植被');
     addSimpleVegetation();
