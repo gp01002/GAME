@@ -218,37 +218,16 @@ function buildScene(){
 
     // ── 天空背景 ─────────────────────────────────
     if(CONFIG.SKY_IMG) new THREE.TextureLoader().load(CONFIG.SKY_IMG,t=>{t.mapping=THREE.EquirectangularReflectionMapping;scene.background=t;});
-
-    // ── 載入 3D 森林場景（裝飾邊緣）────────────────
-    loader.load('forest/scene.gltf', gltf=>{
-        const forest=gltf.scene;
-        // 放大並鋪在場地外圍
-        forest.scale.setScalar(0.08);
-        forest.position.set(0,-0.5,0);
-        forest.traverse(n=>{
-            if(n.isMesh){n.castShadow=true;n.receiveShadow=true;}
-        });
-        scene.add(forest);
-        console.log('[Scene] 森林地形載入成功');
-    }, undefined, err=>{
-        console.warn('[Scene] scene.gltf 未找到，使用純色地面');
-        // Fallback：簡單草叢裝飾
-        addSimpleVegetation();
-    });
 }
 
 function addSimpleVegetation(){
-    // 若 GLTF 未上傳，用簡單幾何形狀裝飾地面邊緣
-    const bushMat=new THREE.MeshStandardMaterial({color:0x228833});
     const treeMat=new THREE.MeshStandardMaterial({color:0x336622});
     for(let i=0;i<40;i++){
         const angle=Math.random()*Math.PI*2;
         const dist=CONFIG.FIELD_SIZE+3+Math.random()*15;
         const x=Math.cos(angle)*dist, z=Math.sin(angle)*dist;
-        // 樹幹
         const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.3,1.5,6),new THREE.MeshStandardMaterial({color:0x885533}));
         trunk.position.set(x,0.75,z); scene.add(trunk);
-        // 樹冠
         const crown=new THREE.Mesh(new THREE.SphereGeometry(1.2+Math.random(),6,5),treeMat.clone());
         crown.position.set(x,2.5+Math.random(),z); scene.add(crown);
     }
@@ -326,6 +305,19 @@ const foodGLBCache={};
 const loader=new GLTFLoader(), keys={};
 const knob=document.getElementById('joystick-knob');
 let joyActive=false, joyX=0, joyY=0;
+
+// ── 森林地形（loader 宣告後才能呼叫）────────
+loader.load('forest/scene.gltf', gltf=>{
+    const forest=gltf.scene;
+    forest.scale.setScalar(0.08);
+    forest.position.set(0,-0.5,0);
+    forest.traverse(n=>{if(n.isMesh){n.castShadow=true;n.receiveShadow=true;}});
+    scene.add(forest);
+    console.log('[Scene] ✅ 森林地形載入成功');
+}, undefined, ()=>{
+    console.warn('[Scene] scene.gltf 未找到，使用簡單植被');
+    addSimpleVegetation();
+});
 let dragActive=false, dragLastX=0, dragLastY=0;
 let touchIds={cam:-1,joy:-1};
 
