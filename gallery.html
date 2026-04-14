@@ -8,56 +8,21 @@
         *{box-sizing:border-box;}
         body{margin:0;overflow:hidden;background:#060614;font-family:"Microsoft JhengHei",sans-serif;touch-action:none;}
         #c{position:fixed;top:0;left:0;width:100%;height:100%;}
-
-        /* 標題 */
-        #title{position:fixed;top:14px;left:50%;transform:translateX(-50%);
-            color:#fff;font-size:15px;font-weight:bold;letter-spacing:2px;
-            background:rgba(20,20,60,0.75);padding:5px 22px;border-radius:20px;
-            border:1px solid rgba(150,150,255,0.4);pointer-events:none;z-index:100;
-            text-shadow:0 0 12px rgba(150,150,255,0.8);}
-
-        /* 說明 */
-        #hint{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);
-            color:rgba(255,255,255,0.45);font-size:10px;pointer-events:none;z-index:100;white-space:nowrap;}
-
-        /* 返回遊戲 */
-        #back-btn{position:fixed;top:14px;left:16px;
-            background:rgba(30,30,80,0.85);border:1px solid rgba(100,100,255,0.5);
-            color:#aac;padding:5px 14px;border-radius:16px;cursor:pointer;font-size:12px;z-index:200;}
+        #title{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:#fff;font-size:15px;font-weight:bold;letter-spacing:2px;background:rgba(20,20,60,0.75);padding:5px 22px;border-radius:20px;border:1px solid rgba(150,150,255,0.4);pointer-events:none;z-index:100;text-shadow:0 0 12px rgba(150,150,255,0.8);}
+        #hint{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.45);font-size:10px;pointer-events:none;z-index:100;white-space:nowrap;}
+        #back-btn{position:fixed;top:14px;left:16px;background:rgba(30,30,80,0.85);border:1px solid rgba(100,100,255,0.5);color:#aac;padding:5px 14px;border-radius:16px;cursor:pointer;font-size:12px;z-index:200;}
         #back-btn:hover{background:rgba(60,60,140,0.9);}
-
-        /* 搖桿 */
         #joy-zone{position:fixed;bottom:82px;left:20px;width:110px;height:110px;z-index:300;display:none;}
-        #joy-base{width:100%;height:100%;background:rgba(255,255,255,0.1);border-radius:50%;
-            border:2px solid rgba(150,150,255,0.5);position:relative;}
-        #joy-knob{position:absolute;top:32px;left:32px;width:46px;height:46px;
-            background:rgba(120,120,255,0.7);border-radius:50%;box-shadow:0 0 14px rgba(120,120,255,0.6);}
-
-        /* 清除筆畫鈕 */
-        #clear-mob{position:fixed;bottom:90px;right:20px;width:68px;height:68px;border-radius:50%;
-            background:rgba(80,80,200,0.85);border:3px solid #8888ff;
-            color:#fff;font-size:24px;display:none;align-items:center;justify-content:center;
-            z-index:300;user-select:none;touch-action:none;box-shadow:0 0 18px rgba(80,80,220,0.6);}
-
-        /* 畫筆工具列 */
-        #brush-bar{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);
-            display:flex;align-items:center;gap:8px;
-            background:rgba(10,10,40,0.88);padding:7px 14px;
-            border-radius:30px;border:1px solid rgba(120,120,255,0.3);z-index:200;
-            backdrop-filter:blur(8px);}
-        .bc{width:26px;height:26px;border-radius:50%;cursor:pointer;
-            border:2px solid rgba(255,255,255,0.25);transition:transform 0.15s;}
+        #joy-base{width:100%;height:100%;background:rgba(255,255,255,0.1);border-radius:50%;border:2px solid rgba(150,150,255,0.5);position:relative;}
+        #joy-knob{position:absolute;top:32px;left:32px;width:46px;height:46px;background:rgba(120,120,255,0.7);border-radius:50%;box-shadow:0 0 14px rgba(120,120,255,0.6);}
+        #clear-mob{position:fixed;bottom:90px;right:20px;width:68px;height:68px;border-radius:50%;background:rgba(80,80,200,0.85);border:3px solid #8888ff;color:#fff;font-size:24px;display:none;align-items:center;justify-content:center;z-index:300;user-select:none;touch-action:none;}
+        #brush-bar{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;background:rgba(10,10,40,0.88);padding:7px 14px;border-radius:30px;border:1px solid rgba(120,120,255,0.3);z-index:200;backdrop-filter:blur(8px);}
+        .bc{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid rgba(255,255,255,0.25);transition:transform 0.15s;}
         .bc.on{border:3px solid #fff;transform:scale(1.3);}
         #sz{width:55px;accent-color:#8888ff;}
-        .bb{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.35);
-            color:#fff;padding:4px 12px;border-radius:12px;cursor:pointer;font-size:11px;white-space:nowrap;}
+        .bb{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.35);color:#fff;padding:4px 12px;border-radius:12px;cursor:pointer;font-size:11px;white-space:nowrap;}
         .bb.on{background:rgba(255,80,80,0.4);border-color:#ff6666;}
-
-        @media (pointer:coarse){
-            #joy-zone{display:block;}
-            #clear-mob{display:flex;}
-            #hint{display:none;}
-        }
+        @media(pointer:coarse){#joy-zone{display:block;}#clear-mob{display:flex;}#hint{display:none;}}
     </style>
 </head>
 <body>
@@ -65,7 +30,6 @@
 <div id="title">🖼️ 虛擬藝廊</div>
 <button id="back-btn" onclick="location.href='index.html'">← 遊戲</button>
 <div id="hint">WASD 移動 ｜ 拖曳 轉視角 ｜ 按住左鍵 畫畫</div>
-
 <div id="brush-bar">
     <span style="color:#888;font-size:11px;">🖌️</span>
     <div class="bc on" style="background:#ff4444" data-c="#ff4444"></div>
@@ -80,7 +44,6 @@
     <button class="bb" id="draw-btn">✏️ 畫</button>
     <button class="bb" id="clear-btn">🗑️</button>
 </div>
-
 <div id="joy-zone"><div id="joy-base"><div id="joy-knob"></div></div></div>
 <div id="clear-mob">🗑️</div>
 
@@ -92,278 +55,231 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRButton }   from 'three/addons/webxr/VRButton.js';
 
-// ════════════════════════════════════════
-//  學生資料（對應 student_0.glb、gallery_0.png）
-// ════════════════════════════════════════
-const STUDENTS = [
-    {name:"高安妤",  color:0xff4444},
-    {name:"饒允志",  color:0x44ccff},
-    {name:"朱采曼",  color:0x8844ff},
-    {name:"林宸慈",  color:0x44ff88},
-    {name:"駱采綺",  color:0xffdd44},
-    {name:"莊芷媛",  color:0xff44aa},
-    {name:"蘇汶欣",  color:0xaa44ff},
-    {name:"葉子菱",  color:0xff8844},
-    {name:"張羽涵",  color:0xffffff},
-    {name:"高子媛",  color:0xffeeaa},
-    {name:"金煜喬",  color:0xccaa66},
-    {name:"陳品霖",  color:0x999999},
-    {name:"許博勛",  color:0xffaa00},
-    {name:"陳湘妮",  color:0xffccee},
-    {name:"劉奕汝",  color:0xffbbbb},
-    {name:"蔡明樺",  color:0xbbbbff},
-    {name:"鍾凱羽",  color:0xbbffcc},
-    {name:"葉子菱",  color:0x88ccff},
-    {name:"林子婷",  color:0xffaacc},
-    {name:"學員20",  color:0xaaffaa},
-    {name:"學員21",  color:0xffcc88},
+const STUDENTS=[
+    {name:"高安妤",color:0xff4444},{name:"饒允志",color:0x44ccff},
+    {name:"朱采曼",color:0x8844ff},{name:"林宸慈",color:0x44ff88},
+    {name:"駱采綺",color:0xffdd44},{name:"莊芷媛",color:0xff44aa},
+    {name:"蘇汶欣",color:0xaa44ff},{name:"葉子菱",color:0xff8844},
+    {name:"張羽涵",color:0xffffff},{name:"高子媛",color:0xffeeaa},
+    {name:"金煜喬",color:0xccaa66},{name:"陳品霖",color:0x999999},
+    {name:"許博勛",color:0xffaa00},{name:"陳湘妮",color:0xffccee},
+    {name:"劉奕汝",color:0xffbbbb},{name:"蔡明樺",color:0xbbbbff},
+    {name:"鍾凱羽",color:0xbbffcc},{name:"葉子菱",color:0x88ccff},
+    {name:"林子婷",color:0xffaacc},{name:"學員20",color:0xaaffaa},
+    {name:"學員21",color:0xffcc88},
 ];
-const CHAR_SCALE        = 3.5;
-const CHAR_MODEL_ROTATE = -Math.PI * 0.5;
-const GALLERY_RADIUS    = 28;
+const RADIUS=28;
 
-// ════════════════════════════════════════
-//  Three.js
-// ════════════════════════════════════════
-const canvas   = document.getElementById('c');
-const scene    = new THREE.Scene();
-const camera   = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 300);
-const renderer = new THREE.WebGLRenderer({canvas, antialias:false});
+const canvas=document.getElementById('c');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.1,300);
+const renderer=new THREE.WebGLRenderer({canvas,antialias:false});
 renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
-renderer.setSize(innerWidth, innerHeight);
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.xr.enabled  = true;
+renderer.setSize(innerWidth,innerHeight);
+renderer.xr.enabled=true;
+const vrRig=new THREE.Group(); vrRig.add(camera); scene.add(vrRig);
 
-// VR rig
-const vrRig = new THREE.Group(); vrRig.add(camera); scene.add(vrRig);
+// 場景
+scene.background=new THREE.Color(0x060614);
+scene.fog=new THREE.Fog(0x060614,45,110);
+new THREE.TextureLoader().load('sky2.jpg',t=>{
+    t.mapping=THREE.EquirectangularReflectionMapping;
+    scene.background=t; scene.fog=null;
+});
 
-// ════════════════════════════════════════
-//  場景建立
-// ════════════════════════════════════════
-function buildScene(){
-    // 背景：深夜藍 / sky2.jpg
-    scene.background = new THREE.Color(0x060614);
-    scene.fog = new THREE.Fog(0x060614, 45, 110);
-    new THREE.TextureLoader().load('sky2.jpg', t=>{
-        t.mapping=THREE.EquirectangularReflectionMapping;
-        scene.background=t; scene.fog=null;
+// 燈光
+scene.add(new THREE.AmbientLight(0xaabbdd,1.2));
+const ml=new THREE.DirectionalLight(0xeeeeff,2.5); ml.position.set(0,50,0); scene.add(ml);
+scene.add(new THREE.HemisphereLight(0x5566aa,0x222244,1.0));
+[-1,1].forEach(s=>{const sp=new THREE.SpotLight(0xaaccff,3,70,Math.PI/5,0.4);sp.position.set(s*18,20,0);scene.add(sp);});
+
+// 地板
+const fM=new THREE.MeshStandardMaterial({color:0xf0f0ff,metalness:0.75,roughness:0.04});
+const fl=new THREE.Mesh(new THREE.PlaneGeometry(200,200),fM); fl.rotation.x=-Math.PI/2; scene.add(fl);
+const gr=new THREE.GridHelper(200,80,0xccccee,0xddddff); gr.material.transparent=true; gr.material.opacity=0.12; gr.position.y=0.01; scene.add(gr);
+
+// 邊界柱
+const pM=new THREE.MeshStandardMaterial({color:0xccccff,emissive:0x8888ff,emissiveIntensity:0.45,metalness:0.8,roughness:0.1});
+for(let i=0;i<20;i++){
+    const a=i/20*Math.PI*2,d=38,h=2.2+Math.sin(i*0.8)*1.0;
+    const p=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.2,h,8),pM);
+    p.position.set(Math.cos(a)*d,h/2,Math.sin(a)*d); scene.add(p);
+    const gl=new THREE.PointLight(0x8888ff,0.7,8); gl.position.set(Math.cos(a)*d,h+0.5,Math.sin(a)*d); scene.add(gl);
+}
+const cM=new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xaaaaff,emissiveIntensity:0.7,metalness:0.9,roughness:0.04});
+const cd=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.7,0.1,16),cM); cd.position.y=0.05; scene.add(cd);
+const clt=new THREE.PointLight(0xaaaaff,2.5,28); clt.position.set(0,1.5,0); scene.add(clt);
+
+// 椅子
+(function(){
+    const bM2=new THREE.MeshStandardMaterial({color:0x334466,metalness:0.5,roughness:0.3});
+    const lM2=new THREE.MeshStandardMaterial({color:0x7788aa,metalness:0.6,roughness:0.2});
+    [{x:0,z:7},{x:0,z:-7},{x:7,z:0},{x:-7,z:0},{x:13,z:13},{x:-13,z:13},{x:13,z:-13},{x:-13,z:-13}].forEach(function(pos){
+        var g=new THREE.Group();
+        var seat=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.18,0.65),bM2); seat.position.y=0.48; g.add(seat);
+        var back=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.55,0.1),bM2); back.position.set(0,0.88,0.27); g.add(back);
+        [[-1,0.15,-0.25],[1,0.15,-0.25],[-1,0.15,0.25],[1,0.15,0.25]].forEach(function(lp){
+            var leg=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.38,0.08),lM2); leg.position.set(lp[0],lp[1],lp[2]); g.add(leg);
+        });
+        g.position.set(pos.x,0,pos.z); g.rotation.y=Math.atan2(pos.x,pos.z)+Math.PI/2; scene.add(g);
     });
+}());
 
-    // 燈光
-    scene.add(new THREE.AmbientLight(0xaabbdd, 1.2));
-    const main=new THREE.DirectionalLight(0xeeeeff,2.5); main.position.set(0,50,0); scene.add(main);
-    scene.add(new THREE.HemisphereLight(0x5566aa,0x222244,1.0));
-    [-1,1].forEach(s=>{
-        const spot=new THREE.SpotLight(0xaaccff,3,70,Math.PI/5,0.4);
-        spot.position.set(s*18,20,0); scene.add(spot);
-    });
-
-    // 白色大理石地板
-    const floorMat=new THREE.MeshStandardMaterial({color:0xf0f0ff,metalness:0.75,roughness:0.04});
-    scene.add(Object.assign(new THREE.Mesh(new THREE.PlaneGeometry(200,200),floorMat),{rotation:{x:-Math.PI/2,y:0,z:0}}));
-    const grid=new THREE.GridHelper(200,80,0xccccee,0xddddff);
-    grid.material.transparent=true; grid.material.opacity=0.12; grid.position.y=0.01; scene.add(grid);
-
-    // 邊界發光柱
-    const pMat=new THREE.MeshStandardMaterial({color:0xccccff,emissive:0x8888ff,emissiveIntensity:0.45,metalness:0.8,roughness:0.1});
-    for(let i=0;i<20;i++){
-        const a=i/20*Math.PI*2, d=38;
-        const h=2.2+Math.sin(i*0.8)*1.0;
-        const p=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.2,h,8),pMat);
-        p.position.set(Math.cos(a)*d, h/2, Math.sin(a)*d); scene.add(p);
-        const gl=new THREE.PointLight(0x8888ff,0.7,8);
-        gl.position.set(Math.cos(a)*d,h+0.5,Math.sin(a)*d); scene.add(gl);
+// 圖片載入（callback 方式，不用 await）
+const texL=new THREE.TextureLoader();
+function tryLoadTex(base,mat){
+    var urls=[base+'.png',base+'.jpg'];
+    var idx=0;
+    function next(){
+        if(idx>=urls.length) return;
+        var url=urls[idx++];
+        fetch(url,{method:'HEAD'}).then(function(r){
+            if(r.ok){ texL.load(url,function(t){mat.map=t;mat.color.set(0xffffff);mat.needsUpdate=true;}); }
+            else next();
+        }).catch(function(){next();});
     }
-
-    // 中央地標
-    const cMat=new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xaaaaff,emissiveIntensity:0.7,metalness:0.9,roughness:0.04});
-    scene.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.7,0.1,16),cMat),{position:{x:0,y:0.05,z:0}}));
-    const cl=new THREE.PointLight(0xaaaaff,2.5,28); cl.position.set(0,1.5,0); scene.add(cl);
-
-    // 椅子
-    buildBenches();
+    next();
 }
 
-function buildBenches(){
-    const bMat=new THREE.MeshStandardMaterial({color:0x334466,metalness:0.5,roughness:0.3});
-    const lMat=new THREE.MeshStandardMaterial({color:0x7788aa,metalness:0.6,roughness:0.2});
-    [{x:0,z:7},{x:0,z:-7},{x:7,z:0},{x:-7,z:0},
-     {x:13,z:13},{x:-13,z:13},{x:13,z:-13},{x:-13,z:-13}].forEach(({x,z})=>{
-        const g=new THREE.Group();
-        const seat=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.18,0.65),bMat); seat.position.y=0.48; g.add(seat);
-        const back=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.55,0.1),bMat);  back.position.set(0,0.88,0.27); g.add(back);
-        [[-1,0.15,-0.25],[1,0.15,-0.25],[-1,0.15,0.25],[1,0.15,0.25]].forEach(([lx,ly,lz])=>{
-            const leg=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.38,0.08),lMat); leg.position.set(lx,ly,lz); g.add(leg);
-        });
-        g.position.set(x,0,z); g.rotation.y=Math.atan2(x,z)+Math.PI/2;
-        scene.add(g);
+// 海報 + 角色
+const loader=new GLTFLoader();
+STUDENTS.forEach(function(art,i){
+    var angle=(i/STUDENTS.length)*Math.PI*2;
+    var px=Math.cos(angle)*RADIUS, pz=Math.sin(angle)*RADIUS;
+
+    var frame=new THREE.Mesh(new THREE.BoxGeometry(4.2,5.2,0.14),new THREE.MeshLambertMaterial({color:0xddbb77}));
+    var cardMat=new THREE.MeshBasicMaterial({color:new THREE.Color(art.color)});
+    var card=new THREE.Mesh(new THREE.PlaneGeometry(3.8,4.8),cardMat); card.position.z=0.08;
+    if(i<=18) tryLoadTex('gallery_'+i,cardMat);
+
+    var nc=document.createElement('canvas'); nc.width=512; nc.height=88;
+    var ctx=nc.getContext('2d');
+    ctx.fillStyle='rgba(10,10,40,0.75)'; ctx.fillRect(0,0,512,88);
+    ctx.fillStyle='#eeeeff'; ctx.font='bold 40px Microsoft JhengHei,sans-serif';
+    ctx.textAlign='center'; ctx.fillText((i+1)+'. '+art.name,256,56);
+    var label=new THREE.Mesh(new THREE.PlaneGeometry(3.8,0.55),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(nc),transparent:true}));
+    label.position.set(0,-2.65,0.09);
+
+    var pg=new THREE.Group(); pg.add(frame,card,label);
+    pg.position.set(px,3.2,pz); pg.lookAt(0,3.2,0); scene.add(pg);
+
+    var coa=angle+0.2;
+    var cg=new THREE.Group();
+    cg.position.set(Math.cos(coa)*(RADIUS-3.2),0,Math.sin(coa)*(RADIUS-3.2));
+    cg.rotation.y=angle+Math.PI; scene.add(cg);
+    loader.load('student_'+i+'.glb',function(gltf){
+        var m=gltf.scene; m.scale.setScalar(3.5); m.rotation.y=-Math.PI*0.5; cg.add(m);
+    },undefined,function(){
+        var b=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,1.4,8),new THREE.MeshLambertMaterial({color:art.color}));
+        b.position.y=1.1; cg.add(b);
+        var h=new THREE.Mesh(new THREE.SphereGeometry(0.38,8,8),new THREE.MeshLambertMaterial({color:art.color}));
+        h.position.y=2.1; cg.add(h);
     });
-}
 
-// ════════════════════════════════════════
-//  海報 + 角色
-// ════════════════════════════════════════
-const loader    = new GLTFLoader();
-const texLoader = new THREE.TextureLoader();
+    var rc=new THREE.EllipseCurve(0,0,1.1,1.1,0,Math.PI*2);
+    var ring=new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(rc.getPoints(14))),
+        new THREE.MeshBasicMaterial({color:new THREE.Color(art.color),transparent:true,opacity:0.25,side:THREE.DoubleSide}));
+    ring.rotation.x=-Math.PI/2;
+    ring.position.set(Math.cos(coa)*(RADIUS-3.2),0.05,Math.sin(coa)*(RADIUS-3.2));
+    scene.add(ring);
+});
 
-async function buildGallery(){
-    STUDENTS.forEach((art,i)=>{
-        const angle = (i/STUDENTS.length)*Math.PI*2;
-        const px=Math.cos(angle)*GALLERY_RADIUS, pz=Math.sin(angle)*GALLERY_RADIUS;
-
-        // 外框
-        const frame=new THREE.Mesh(new THREE.BoxGeometry(4.2,5.2,0.14),new THREE.MeshLambertMaterial({color:0xddbb77}));
-        // 海報
-        const cMat=new THREE.MeshBasicMaterial({color:new THREE.Color(art.color)});
-        const card=new THREE.Mesh(new THREE.PlaneGeometry(3.8,4.8),cMat); card.position.z=0.08;
-        // 嘗試載入圖
-        if(i<STUDENTS.length){
-            for(const url of [`gallery_${i}.png`,`gallery_${i}.jpg`]){
-                try{
-                    const r=await fetch(url,{method:'HEAD'});
-                    if(r.ok){ texLoader.load(url,t=>{cMat.map=t;cMat.color.set(0xffffff);cMat.needsUpdate=true;}); break; }
-                }catch(e){}
-            }
-        }
-        // 姓名標籤
-        const nc=document.createElement('canvas'); nc.width=512; nc.height=88;
-        const ctx=nc.getContext('2d');
-        ctx.fillStyle='rgba(10,10,40,0.75)'; ctx.fillRect(0,0,512,88);
-        ctx.fillStyle='#eeeeff'; ctx.font='bold 40px Microsoft JhengHei,sans-serif';
-        ctx.textAlign='center'; ctx.fillText(`${i+1}. ${art.name}`,256,56);
-        const label=new THREE.Mesh(new THREE.PlaneGeometry(3.8,0.55),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(nc),transparent:true}));
-        label.position.set(0,-2.65,0.09);
-
-        const pGroup=new THREE.Group(); pGroup.add(frame,card,label);
-        pGroup.position.set(px,3.2,pz); pGroup.lookAt(0,3.2,0); scene.add(pGroup);
-
-        // 角色（靜態，面向圓心）
-        const cg=new THREE.Group();
-        const coa=angle+0.2;
-        cg.position.set(Math.cos(coa)*(GALLERY_RADIUS-3.2),0,Math.sin(coa)*(GALLERY_RADIUS-3.2));
-        cg.rotation.y=angle+Math.PI; scene.add(cg);
-        loader.load(`student_${i}.glb`,gltf=>{
-            const m=gltf.scene; m.scale.setScalar(CHAR_SCALE); m.rotation.y=CHAR_MODEL_ROTATE; cg.add(m);
-        },undefined,()=>{
-            const b=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,1.4,8),new THREE.MeshLambertMaterial({color:art.color}));
-            b.position.y=1.1; cg.add(b);
-            const h=new THREE.Mesh(new THREE.SphereGeometry(0.38,8,8),new THREE.MeshLambertMaterial({color:art.color}));
-            h.position.y=2.1; cg.add(h);
-        });
-
-        // 地面光圈
-        const rc=new THREE.EllipseCurve(0,0,1.1,1.1,0,Math.PI*2);
-        const ring=new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(rc.getPoints(14))),
-            new THREE.MeshBasicMaterial({color:new THREE.Color(art.color),transparent:true,opacity:0.25,side:THREE.DoubleSide}));
-        ring.rotation.x=-Math.PI/2;
-        ring.position.set(Math.cos(coa)*(GALLERY_RADIUS-3.2),0.05,Math.sin(coa)*(GALLERY_RADIUS-3.2));
-        scene.add(ring);
-    });
-}
-
-// ════════════════════════════════════════
-//  第一人稱控制
-// ════════════════════════════════════════
-const fpPos  = new THREE.Vector3(0, 1.6, 8);
-let fpYaw    = 0;
-let fpDrag   = false, fpDragX = 0;
-const keys   = {};
-let joyActive=false, joyX=0, joyY=0;
-let touchIds = {joy:-1, cam:-1};
-
-// 畫筆
-const drawings = [];
-let isDrawing=false, mouseHeld=false;
-let brushColor=new THREE.Color('#ff4444'), brushSize=0.13;
+// 移動
+var fpPos=new THREE.Vector3(0,1.6,8);
+var fpYaw=0;
+var fpDrag=false, fpDragX=0;
+var keys={};
+var joyActive=false, joyX=0, joyY=0;
+var touchIds={joy:-1,cam:-1};
+var drawings=[];
+var isDrawing=false, mouseHeld=false;
+var brushColor=new THREE.Color('#ff4444'), brushSize=0.13;
 
 function drawDot(){
-    const dir=new THREE.Vector3(Math.sin(fpYaw),0,-Math.cos(fpYaw));
-    const pos=fpPos.clone().addScaledVector(dir,3.5); pos.y=1.6;
-    const pt=new THREE.Mesh(new THREE.SphereGeometry(brushSize,6,6),new THREE.MeshBasicMaterial({color:brushColor.clone()}));
+    var dir=new THREE.Vector3(Math.sin(fpYaw),0,-Math.cos(fpYaw));
+    var pos=fpPos.clone().addScaledVector(dir,3.5);
+    var pt=new THREE.Mesh(new THREE.SphereGeometry(brushSize,6,6),new THREE.MeshBasicMaterial({color:brushColor.clone()}));
     pt.position.copy(pos); scene.add(pt); drawings.push(pt);
     if(drawings.length>2000) scene.remove(drawings.shift());
 }
-function clearDrawings(){ drawings.forEach(d=>scene.remove(d)); drawings.length=0; }
+function clearAll(){ drawings.forEach(function(d){scene.remove(d);}); drawings.length=0; }
 
-// ── UI 事件 ──────────────────────────────
-document.querySelectorAll('.bc').forEach(el=>{
-    el.addEventListener('click',()=>{document.querySelectorAll('.bc').forEach(e=>e.classList.remove('on'));el.classList.add('on');brushColor.set(el.dataset.c);});
+document.querySelectorAll('.bc').forEach(function(el){
+    el.addEventListener('click',function(){
+        document.querySelectorAll('.bc').forEach(function(e){e.classList.remove('on');});
+        el.classList.add('on'); brushColor.set(el.dataset.c);
+    });
 });
-document.getElementById('sz').addEventListener('input',e=>brushSize=parseFloat(e.target.value));
-document.getElementById('draw-btn').addEventListener('click',()=>{isDrawing=!isDrawing;document.getElementById('draw-btn').classList.toggle('on',isDrawing);document.getElementById('draw-btn').textContent=isDrawing?'🛑 停':'✏️ 畫';});
-document.getElementById('clear-btn').addEventListener('click',clearDrawings);
-document.getElementById('clear-mob').addEventListener('touchstart',e=>{e.preventDefault();clearDrawings();},{passive:false});
+document.getElementById('sz').addEventListener('input',function(e){brushSize=parseFloat(e.target.value);});
+document.getElementById('draw-btn').addEventListener('click',function(){
+    isDrawing=!isDrawing;
+    document.getElementById('draw-btn').classList.toggle('on',isDrawing);
+    document.getElementById('draw-btn').textContent=isDrawing?'🛑 停':'✏️ 畫';
+});
+document.getElementById('clear-btn').addEventListener('click',clearAll);
+document.getElementById('clear-mob').addEventListener('touchstart',function(e){e.preventDefault();clearAll();},{passive:false});
 
-// 滑鼠
-const cvs=renderer.domElement;
-cvs.addEventListener('mousedown',e=>{ mouseHeld=true; if(e.button===0&&!isDrawing){fpDrag=true;fpDragX=e.clientX;} });
-cvs.addEventListener('mousemove',e=>{ if(fpDrag){fpYaw-=(e.clientX-fpDragX)*0.005;fpDragX=e.clientX;} });
-cvs.addEventListener('mouseup',()=>{ mouseHeld=false; fpDrag=false; });
-cvs.addEventListener('mouseleave',()=>fpDrag=false);
+var cvs=renderer.domElement;
+cvs.addEventListener('mousedown',function(e){mouseHeld=true;if(!isDrawing){fpDrag=true;fpDragX=e.clientX;}});
+cvs.addEventListener('mousemove',function(e){if(fpDrag){fpYaw-=(e.clientX-fpDragX)*0.005;fpDragX=e.clientX;}});
+cvs.addEventListener('mouseup',function(){mouseHeld=false;fpDrag=false;});
+cvs.addEventListener('mouseleave',function(){fpDrag=false;});
 
-// 觸控
-const jBase=document.getElementById('joy-base');
-const jKnob=document.getElementById('joy-knob');
-const jZone=document.getElementById('joy-zone');
-document.addEventListener('touchstart',e=>{
-    Array.from(e.changedTouches).forEach(t=>{
-        const br=document.getElementById('brush-bar').getBoundingClientRect();
+var jBase=document.getElementById('joy-base');
+var jKnob=document.getElementById('joy-knob');
+var jZone=document.getElementById('joy-zone');
+document.addEventListener('touchstart',function(e){
+    Array.from(e.changedTouches).forEach(function(t){
+        var br=document.getElementById('brush-bar').getBoundingClientRect();
         if(t.clientY>=br.top) return;
-        const jr=jZone.getBoundingClientRect();
-        const inJ=t.clientX>=jr.left&&t.clientX<=jr.right&&t.clientY>=jr.top&&t.clientY<=jr.bottom;
+        var jr=jZone.getBoundingClientRect();
+        var inJ=t.clientX>=jr.left&&t.clientX<=jr.right&&t.clientY>=jr.top&&t.clientY<=jr.bottom;
         if(inJ){if(touchIds.joy===-1){touchIds.joy=t.identifier;joyActive=true;}}
         else{if(touchIds.cam===-1){touchIds.cam=t.identifier;fpDrag=true;fpDragX=t.clientX;}}
     });
 },{passive:true});
-document.addEventListener('touchmove',e=>{
-    Array.from(e.changedTouches).forEach(t=>{
+document.addEventListener('touchmove',function(e){
+    Array.from(e.changedTouches).forEach(function(t){
         if(t.identifier===touchIds.joy){
-            const r=jBase.getBoundingClientRect();
+            var r=jBase.getBoundingClientRect();
             joyX=(t.clientX-r.left-r.width/2)/55; joyY=(t.clientY-r.top-r.height/2)/55;
-            const d=Math.hypot(joyX,joyY); if(d>1){joyX/=d;joyY/=d;}
-            jKnob.style.transform=`translate(${joyX*32}px,${joyY*32}px)`;
+            var d=Math.hypot(joyX,joyY); if(d>1){joyX/=d;joyY/=d;}
+            jKnob.style.transform='translate('+joyX*32+'px,'+joyY*32+'px)';
         }
         if(t.identifier===touchIds.cam&&fpDrag){fpYaw-=(t.clientX-fpDragX)*0.006;fpDragX=t.clientX;}
     });
 },{passive:true});
-document.addEventListener('touchend',e=>{
-    Array.from(e.changedTouches).forEach(t=>{
+document.addEventListener('touchend',function(e){
+    Array.from(e.changedTouches).forEach(function(t){
         if(t.identifier===touchIds.joy){touchIds.joy=-1;joyActive=false;joyX=joyY=0;jKnob.style.transform='translate(0,0)';}
         if(t.identifier===touchIds.cam){touchIds.cam=-1;fpDrag=false;}
     });
 },{passive:true});
-addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);
-addEventListener('keyup',  e=>keys[e.key.toLowerCase()]=false);
-addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+addEventListener('keydown',function(e){keys[e.key.toLowerCase()]=true;});
+addEventListener('keyup',function(e){keys[e.key.toLowerCase()]=false;});
+addEventListener('resize',function(){
+    camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight);
+});
 
-// ════════════════════════════════════════
-//  主迴圈
-// ════════════════════════════════════════
-const SPEED=0.15;
+var SPEED=0.15;
 function animate(){
-    const fwdX=Math.sin(fpYaw), fwdZ=Math.cos(fpYaw);
+    var fwdX=Math.sin(fpYaw), fwdZ=Math.cos(fpYaw);
     if(keys['w']||keys['arrowup'])   {fpPos.x-=fwdX*SPEED;fpPos.z-=fwdZ*SPEED;}
     if(keys['s']||keys['arrowdown']) {fpPos.x+=fwdX*SPEED;fpPos.z+=fwdZ*SPEED;}
     if(keys['a']||keys['arrowleft']) fpYaw+=0.04;
     if(keys['d']||keys['arrowright'])fpYaw-=0.04;
-
     if(joyActive){
-        const d=Math.hypot(joyX,joyY);
+        var d=Math.hypot(joyX,joyY);
         if(d>0.1){
             fpPos.x-=fwdX*SPEED*(-joyY)*Math.min(d,1);
             fpPos.z-=fwdZ*SPEED*(-joyY)*Math.min(d,1);
             fpYaw  -=joyX*0.055*Math.min(d,1);
         }
     }
-
-    // 邊界
     fpPos.x=Math.max(-55,Math.min(55,fpPos.x));
     fpPos.z=Math.max(-55,Math.min(55,fpPos.z));
-
-    // 畫筆
     if(isDrawing&&mouseHeld) drawDot();
-
-    // 攝影機
     if(renderer.xr.isPresenting){
         vrRig.position.set(fpPos.x,fpPos.y,fpPos.z);
     } else {
@@ -371,18 +287,10 @@ function animate(){
         camera.position.copy(fpPos);
         camera.rotation.set(0,fpYaw,0);
     }
-
     renderer.render(scene,camera);
 }
 
-// ════════════════════════════════════════
-//  啟動
-// ════════════════════════════════════════
-buildScene();
-buildGallery();
-
-// VR 按鈕
-const vrBtn=VRButton.createButton(renderer);
+var vrBtn=VRButton.createButton(renderer);
 vrBtn.style.cssText+='bottom:140px !important;font-size:12px !important;';
 document.body.appendChild(vrBtn);
 
