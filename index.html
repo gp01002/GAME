@@ -35,6 +35,8 @@
         #host-badge{position:fixed;top:55px;left:50%;transform:translateX(-50%);color:#ffee44;font-size:11px;background:rgba(30,20,0,0.7);padding:3px 12px;border-radius:10px;pointer-events:none;z-index:150;display:none;}
         #eat-flash{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);font-size:34px;font-weight:bold;color:#fff;pointer-events:none;z-index:300;opacity:0;transition:opacity 0.15s;text-shadow:0 0 24px #0ff;}
         #hint-ui{position:fixed;bottom:75px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.4);font-size:10px;pointer-events:none;z-index:150;white-space:nowrap;}
+        /* VR 按鈕由 Three.js 自動加入，調整位置 */
+        #VRButton{bottom:80px !important;}
 
         /* 倒數警告 */
         #timer-ui.warn{color:#ff4444;border-color:#ff4444;text-shadow:0 0 10px #f00;animation:pulse 0.5s infinite alternate;}
@@ -78,6 +80,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRButton }   from 'three/addons/webxr/VRButton.js';
 import { initializeApp }   from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, getDocs, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
@@ -149,59 +152,74 @@ const FOOD_COLORS=[0xff3333,0x33ff66,0xffff33,0xff33ff,0x33ffff,0xff8800,0xfffff
 // ════════════════════════════════════════
 const scene    = new THREE.Scene();
 const camera   = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({antialias:false}); // ★ 關抗鋸齒提速
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); // ★ 限制最高 1.5x
+const renderer = new THREE.WebGLRenderer({antialias:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.shadowMap.enabled = false; // ★ 關陰影大幅提速
+renderer.shadowMap.enabled = false;
+renderer.xr.enabled = true; // ★ 開啟 WebXR VR
 document.getElementById('game-container').appendChild(renderer.domElement);
+
+// ── 地形高度函式（用三角函數模擬自然起伏）──
+function terrainY(x,z){
+    return Math.sin(x*0.08)*1.5 + Math.cos(z*0.07)*1.2
+         + Math.sin(x*0.2+z*0.15)*0.6
+         + Math.cos(x*0.05-z*0.09)*1.8;
+}
+
+// 地形頂點快取（供食物高度使用）
+const terrainGeo = new THREE.PlaneGeometry(300,300,80,80);
 
 function buildScene(){
     scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.Fog(0x87ceeb, 40, 120);
+    scene.fog = new THREE.Fog(0x87ceeb, 50, 130);
 
-    // 星星（減少數量）
-    const sp=[], sg=new THREE.BufferGeometry();
-    for(let i=0;i<800;i++) sp.push((Math.random()-.5)*400,Math.random()*80+15,(Math.random()-.5)*400);
-    sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
-    scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:0.2,transparent:true,opacity:0.5})));
-
-    // 地板（草地綠貼圖）
+    // ── 地形（起伏地面）────────────────────────
+    const pos = terrainGeo.attributes.position;
+    for(let i=0;i<pos.count;i++){
+        const x=pos.getX(i), z=pos.getZ(i);
+        // 遊戲場地中央保持平坦
+        const distFromCenter=Math.sqrt(x*x+z*z);
+        const flatness=Math.max(0, 1-Math.max(0,(distFromCenter-20)/25));
+        pos.setY(i, terrainY(x,z)*(1-flatness));
+    }
+    terrainGeo.computeVertexNormals();
     const floorTex = new THREE.TextureLoader().load('forest/textures/Floor_baseColor.jpeg');
     floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
-    floorTex.repeat.set(12, 12);
-    const floor=new THREE.Mesh(
-        new THREE.PlaneGeometry(300,300),
-        new THREE.MeshLambertMaterial({map:floorTex}) // ★ Lambert 比 Standard 快
-    );
-    floor.rotation.x=-Math.PI/2; scene.add(floor);
+    floorTex.repeat.set(15,15);
+    const floor = new THREE.Mesh(terrainGeo,
+        new THREE.MeshLambertMaterial({map:floorTex}));
+    floor.rotation.x = -Math.PI/2;
+    scene.add(floor);
 
-    // 彩色地面圓圈裝飾（減少數量）
+    // ── 河流 ────────────────────────────────────
+    addRiver();
+
+    // ── 地面彩色圓圈 ────────────────────────────
     const patchColors=[0x88dd44,0x44cc88,0xddcc22,0xff8844,0x44aaff,0xee44aa];
-    for(let i=0;i<16;i++){
+    for(let i=0;i<14;i++){
         const c=patchColors[i%patchColors.length];
         const patch=new THREE.Mesh(
-            new THREE.CircleGeometry(2+Math.random()*3,8),
-            new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.2}) // ★ Basic 最快
+            new THREE.CircleGeometry(1.5+Math.random()*2.5,8),
+            new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.18})
         );
         patch.rotation.x=-Math.PI/2;
-        patch.position.set((Math.random()-.5)*120,0.02,(Math.random()-.5)*120);
+        patch.position.set((Math.random()-.5)*100,0.05,(Math.random()-.5)*100);
         scene.add(patch);
     }
 
-    // 淡格線
-    const grid=new THREE.GridHelper(300,60,0x44aa44,0x228822);
-    grid.material.transparent=true; grid.material.opacity=0.15;
-    grid.position.y=0.03; scene.add(grid);
+    // 淡格線（遊戲場地範圍）
+    const grid=new THREE.GridHelper(CONFIG.FIELD_SIZE*2,20,0x44aa44,0x228822);
+    grid.material.transparent=true; grid.material.opacity=0.12;
+    grid.position.y=0.05; scene.add(grid);
 
-    // 燈光（簡化）
+    // ── 燈光 ────────────────────────────────────
     scene.add(new THREE.AmbientLight(0xffffff,2.2));
     const sun=new THREE.DirectionalLight(0xfffacc,2.5);
-    sun.position.set(30,60,30); sun.castShadow=false; // ★ 關陰影
-    scene.add(sun);
+    sun.position.set(30,60,30); sun.castShadow=false; scene.add(sun);
     scene.add(new THREE.HemisphereLight(0x87ceeb,0x44aa44,1.0));
 
-    // 邊界柱（彩色）
+    // ── 邊界柱 ──────────────────────────────────
     const pillarColors=[0xff4488,0x44ffaa,0xffdd44,0x44aaff];
     [[-1,1],[1,1],[1,-1],[-1,-1]].forEach(([sx,sz],i)=>{
         const c=pillarColors[i];
@@ -211,8 +229,37 @@ function buildScene(){
         const pl=new THREE.PointLight(c,1.5,12); pl.position.set(sx*CONFIG.FIELD_SIZE,8,sz*CONFIG.FIELD_SIZE); scene.add(pl);
     });
 
-    // ── 天空背景 ─────────────────────────────────
-    if(CONFIG.SKY_IMG) new THREE.TextureLoader().load(CONFIG.SKY_IMG,t=>{t.mapping=THREE.EquirectangularReflectionMapping;scene.background=t;});
+    // ── 天空 ────────────────────────────────────
+    if(CONFIG.SKY_IMG) new THREE.TextureLoader().load(CONFIG.SKY_IMG,t=>{
+        t.mapping=THREE.EquirectangularReflectionMapping; scene.background=t;
+    });
+}
+
+// ── 河流（彎曲藍色水面）─────────────────────────
+function addRiver(){
+    // 用多個矩形段拼出一條彎曲河流
+    const riverMat = new THREE.MeshBasicMaterial({
+        color:0x4488dd, transparent:true, opacity:0.65,
+        side:THREE.DoubleSide
+    });
+    const riverPoints=[
+        [-50,-20],[-35,-15],[-20,-5],[0,5],[15,18],[30,25],[50,20]
+    ];
+    for(let i=0;i<riverPoints.length-1;i++){
+        const [x1,z1]=riverPoints[i], [x2,z2]=riverPoints[i+1];
+        const cx=(x1+x2)/2, cz=(z1+z2)/2;
+        const dx=x2-x1, dz=z2-z1;
+        const len=Math.sqrt(dx*dx+dz*dz);
+        const angle=Math.atan2(dx,dz);
+        const seg=new THREE.Mesh(new THREE.PlaneGeometry(4+Math.random()*2,len+1),riverMat);
+        seg.rotation.x=-Math.PI/2;
+        seg.rotation.z=angle;
+        seg.position.set(cx,0.08,cz);
+        scene.add(seg);
+    }
+    // 河流發光效果
+    const riverLight=new THREE.PointLight(0x4488dd,1.5,30);
+    riverLight.position.set(0,2,5); scene.add(riverLight);
 }
 buildScene();
 
@@ -317,95 +364,62 @@ function addSceneDecorations(){
     });
 }
 
-function addCartoonTree(x,z){
-    const h=2+Math.random()*2;
-    const colors=[0x228833,0x33aa44,0x44bb55,0x66cc44,0x55aa33];
+// ── 碰撞體列表 ──────────────────────────────────
+const colliders=[];
+
+function addCartoonTree(x,z,s=null){
+    s=s??(0.6+Math.random()*1.8);
+    const h=(2+Math.random()*2)*s;
+    const colors=[0x228833,0x33aa44,0x44bb55,0x66cc44,0x55aa33,0x22aa66];
     const color=colors[Math.floor(Math.random()*colors.length)];
-    // 樹幹
-    const trunk=new THREE.Mesh(
-        new THREE.CylinderGeometry(0.15,0.22,h,6),
-        new THREE.MeshLambertMaterial({color:0x8B5E3C})
-    );
-    trunk.position.set(x,h/2,z);
-    scene.add(trunk);
-    // 樹冠（1~3層）
+    const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.15*s,0.22*s,h,6),new THREE.MeshLambertMaterial({color:0x8B5E3C}));
+    trunk.position.set(x,h/2,z); scene.add(trunk);
     const layers=1+Math.floor(Math.random()*2);
     for(let k=0;k<layers;k++){
-        const r=1.0+Math.random()*0.8 - k*0.3;
-        const crown=new THREE.Mesh(
-            new THREE.ConeGeometry(r, r*1.4, 7),
-            new THREE.MeshLambertMaterial({color})
-        );
-        crown.position.set(x, h+k*0.8, z);
-        scene.add(crown);
+        const r=(1.0+Math.random()*0.8-k*0.3)*s;
+        const crown=new THREE.Mesh(new THREE.ConeGeometry(r,r*1.4,7),new THREE.MeshLambertMaterial({color}));
+        crown.position.set(x,h+k*0.8*s,z); scene.add(crown);
     }
+    colliders.push({x,z,r:0.55*s});
 }
 
-function addCartoonRock(x,z){
-    const colors=[0x888888,0x999977,0xaaaaaa,0x776655];
+function addCartoonRock(x,z,s=null){
+    s=s??(0.4+Math.random()*1.2);
+    const colors=[0x888888,0x999977,0xaaaaaa,0x776655,0x998866];
     const color=colors[Math.floor(Math.random()*colors.length)];
-    const s=0.5+Math.random()*0.8;
-    // 主石塊
-    const rock=new THREE.Mesh(
-        new THREE.DodecahedronGeometry(s, 0),
-        new THREE.MeshLambertMaterial({color})
-    );
-    rock.position.set(x, s*0.6, z);
-    rock.rotation.set(Math.random(),Math.random(),Math.random());
-    scene.add(rock);
-    // 小石塊陪伴
-    if(Math.random()>0.5){
-        const s2=s*0.5;
-        const rock2=new THREE.Mesh(
-            new THREE.DodecahedronGeometry(s2,0),
-            new THREE.MeshLambertMaterial({color})
-        );
-        rock2.position.set(x+s*0.8,s2*0.5,z+s*0.5);
-        rock2.rotation.set(Math.random(),Math.random(),Math.random());
-        scene.add(rock2);
+    const rock=new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),new THREE.MeshLambertMaterial({color}));
+    rock.position.set(x,s*0.6,z); rock.rotation.set(Math.random(),Math.random(),Math.random()); scene.add(rock);
+    if(Math.random()>0.4){
+        const s2=s*(0.3+Math.random()*0.4);
+        const r2=new THREE.Mesh(new THREE.DodecahedronGeometry(s2,0),new THREE.MeshLambertMaterial({color}));
+        r2.position.set(x+s*0.9,s2*0.5,z+s*0.6); r2.rotation.set(Math.random(),Math.random(),Math.random()); scene.add(r2);
     }
+    if(s>0.6) colliders.push({x,z,r:s*0.9});
 }
 
-function addCartoonMushroom(x,z){
-    const capColors=[0xff4444,0xff8844,0xffcc44,0xff44aa,0xcc44ff];
+function addCartoonMushroom(x,z,s=null){
+    s=s??(0.5+Math.random()*1.5);
+    const capColors=[0xff4444,0xff8844,0xffcc44,0xff44aa,0xcc44ff,0xee2222];
     const capColor=capColors[Math.floor(Math.random()*capColors.length)];
-    const h=0.6+Math.random()*0.6;
-    // 菌柄
-    const stem=new THREE.Mesh(
-        new THREE.CylinderGeometry(0.12,0.18,h,8),
-        new THREE.MeshLambertMaterial({color:0xfff5e0})
-    );
-    stem.position.set(x,h/2,z);
-    scene.add(stem);
-    // 傘蓋
-    const cap=new THREE.Mesh(
-        new THREE.SphereGeometry(0.5+Math.random()*0.3, 8, 6, 0, Math.PI*2, 0, Math.PI*0.5),
-        new THREE.MeshLambertMaterial({color:capColor})
-    );
-    cap.position.set(x,h+0.05,z);
-    scene.add(cap);
-    // 白點點
+    const h=(0.6+Math.random()*0.6)*s;
+    const stem=new THREE.Mesh(new THREE.CylinderGeometry(0.12*s,0.18*s,h,8),new THREE.MeshLambertMaterial({color:0xfff5e0}));
+    stem.position.set(x,h/2,z); scene.add(stem);
+    const cap=new THREE.Mesh(new THREE.SphereGeometry((0.5+Math.random()*0.3)*s,8,6,0,Math.PI*2,0,Math.PI*0.5),new THREE.MeshLambertMaterial({color:capColor}));
+    cap.position.set(x,h+0.05,z); scene.add(cap);
     for(let k=0;k<3;k++){
-        const dot=new THREE.Mesh(
-            new THREE.SphereGeometry(0.06,4,4),
-            new THREE.MeshLambertMaterial({color:0xffffff})
-        );
-        const a=k*(Math.PI*2/3)+Math.random()*0.5;
-        const r=0.2+Math.random()*0.15;
-        dot.position.set(x+Math.cos(a)*r, h+0.45, z+Math.sin(a)*r);
-        scene.add(dot);
+        const dot=new THREE.Mesh(new THREE.SphereGeometry(0.06*s,4,4),new THREE.MeshLambertMaterial({color:0xffffff}));
+        const a=k*(Math.PI*2/3)+Math.random()*0.5,r=(0.2+Math.random()*0.15)*s;
+        dot.position.set(x+Math.cos(a)*r,h+0.45*s,z+Math.sin(a)*r); scene.add(dot);
     }
 }
 
-// 場地內部隨機點綴（少量石頭、蘑菇）
 function addFieldAccents(){
-    const F=CONFIG.FIELD_SIZE*0.8;
-    for(let i=0;i<8;i++){
-        const x=(Math.random()-.5)*F*2;
-        const z=(Math.random()-.5)*F*2;
-        // 只放石頭和蘑菇，不放樹（避免擋路）
-        if(Math.random()>0.5) addCartoonRock(x,z);
-        else addCartoonMushroom(x,z);
+    const F=CONFIG.FIELD_SIZE*0.75;
+    for(let i=0;i<10;i++){
+        const x=(Math.random()-.5)*F*2,z=(Math.random()-.5)*F*2;
+        const s=0.3+Math.random()*0.6;
+        if(Math.random()>0.5) addCartoonRock(x,z,s);
+        else addCartoonMushroom(x,z,s);
     }
 }
 
@@ -958,6 +972,19 @@ function animate(){
     keys.isMoving=moving;
     if(myMixer){myMixer.update(dt);safeAnim(myActions,moving);}
 
+    // ★ 碰撞推回（樹木、石頭阻擋）
+    const PLAYER_R=0.7;
+    for(const c of colliders){
+        const dx=myGroup.position.x-c.x, dz=myGroup.position.z-c.z;
+        const dist=Math.sqrt(dx*dx+dz*dz);
+        const minDist=PLAYER_R+c.r;
+        if(dist<minDist&&dist>0.001){
+            const push=(minDist-dist)/dist;
+            myGroup.position.x+=dx*push;
+            myGroup.position.z+=dz*push;
+        }
+    }
+
     // 路徑 & 尾巴
     myPath.unshift({pos:myGroup.position.clone()});
     if(myPath.length>200) myPath.pop(); // ★ 從500減到200
@@ -1102,7 +1129,11 @@ initUI();
 switchChar(0);
 await preloadFoodGLBs();
 initFirebase();
-animate();
+
+// ★ VR 按鈕（裝置支援時自動顯示）
+document.body.appendChild(VRButton.createButton(renderer));
+// 改用 setAnimationLoop 支援 WebXR
+renderer.setAnimationLoop(animate);
 </script>
 </body>
 </html>
