@@ -160,12 +160,32 @@ renderer.shadowMap.enabled = false;
 renderer.xr.enabled = true; // ★ 開啟 WebXR VR
 document.getElementById('game-container').appendChild(renderer.domElement);
 
+// ── VR Rig（讓攝影機在玩家後方，不會跑進角色裡）──
+const vrRig = new THREE.Group();
+scene.add(vrRig);
+vrRig.add(camera);
+// VR 模式：攝影機偏移到角色後上方（第三人稱）
+camera.position.set(0, 1.6, 0); // 一般模式會在 animate 覆蓋
+
 function buildScene(){
     scene.background = new THREE.Color(0x87ceeb);
     scene.fog = new THREE.Fog(0x87ceeb, 55, 140);
 
-    // ── 草地地板（穩定顯示，有貼圖就用貼圖否則用純色）──
-    const floorGeo = new THREE.PlaneGeometry(400,400,1,1);
+    // ── 起伏草地（正確位移：PlaneGeometry 旋轉前設 Z 軸）──
+    const floorGeo = new THREE.PlaneGeometry(400,400,50,50);
+    const pos = floorGeo.attributes.position;
+    for(let i=0; i<pos.count; i++){
+        const x = pos.getX(i);
+        const y = pos.getY(i); // 旋轉前的 Y = 旋轉後的 Z（深度方向）
+        const dist = Math.sqrt(x*x + y*y);
+        // 場地中央 (dist<22) 保持平坦，外圍有起伏
+        const flatness = Math.max(0, 1 - Math.max(0,(dist-22)/18));
+        const h = (Math.sin(x*0.09)*1.4 + Math.cos(y*0.08)*1.1
+                 + Math.sin(x*0.04-y*0.06)*1.6) * (1-flatness);
+        pos.setZ(i, h); // ★ 設 Z（旋轉後變 Y，即世界高度）
+    }
+    floorGeo.computeVertexNormals();
+
     const floorMat = new THREE.MeshLambertMaterial({color:0x6dbf5a});
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI/2;
@@ -868,6 +888,43 @@ addEventListener('keydown',e=>{
 });
 addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
 
+// ── VR 控制器（Quest 搖桿移動）────────────────────
+let vrMoveX=0, vrMoveZ=0;
+renderer.xr.addEventListener('sessionstart', ()=>{
+    const session = renderer.xr.getSession();
+    session.addEventListener('inputsourceschange', ()=>{
+        session.inputSources.forEach(src=>{
+            if(!src.gamepad) return;
+            // 每幀讀取搖桿值
+        });
+    });
+});
+
+function readVRControllers(){
+    if(!renderer.xr.isPresenting) return;
+    const session = renderer.xr.getSession();
+    if(!session) return;
+    vrMoveX=0; vrMoveZ=0;
+    session.inputSources.forEach(src=>{
+        if(!src.gamepad) return;
+        const axes = src.gamepad.axes;
+        const btns = src.gamepad.buttons;
+        if(axes.length>=4){
+            // 左手控制器：軸 0,1 = 左右/前後移動
+            if(src.handedness==='left'){
+                vrMoveX += axes[2]??axes[0]??0;
+                vrMoveZ += axes[3]??axes[1]??0;
+            }
+            // 右手控制器：軸 2,3 = 轉向
+            if(src.handedness==='right'){
+                camAngle -= (axes[2]??0)*0.03;
+            }
+        }
+        // 扳機鍵發射
+        if(btns[0]?.pressed) shoot();
+    });
+}
+
 // 滑鼠視角旋轉
 const cvs=renderer.domElement;
 cvs.addEventListener('mousedown',e=>{if(e.button===0){dragActive=true;dragLastX=e.clientX;dragLastY=e.clientY;}});
@@ -930,7 +987,8 @@ function animate(){
     tickWeather(dt);
     if(roundOver){renderer.render(scene,camera);return;}
 
-    // 移動（鍵盤）
+    // 移動（鍵盤 + VR）
+    readVRControllers();
     let spd=0;
     if(keys['w']||keys['arrowup'])    spd= CONFIG.MOVE_SPEED;
     if(keys['s']||keys['arrowdown'])  spd=-CONFIG.MOVE_SPEED;
@@ -955,14 +1013,27 @@ function animate(){
         }
     }
 
+    // ── VR 搖桿移動 ───────────────────────────────
+    if(renderer.xr.isPresenting && (Math.abs(vrMoveX)>0.15 || Math.abs(vrMoveZ)>0.15)){
+        const vrAngle = Math.atan2(vrMoveX, -vrMoveZ) + camAngle;
+        const vrDist  = Math.hypot(vrMoveX, vrMoveZ);
+        myGroup.rotation.y = vrAngle;
+        const vs = CONFIG.MOVE_SPEED * Math.min(vrDist, 1);
+        myGroup.position.x += Math.sin(vrAngle)*vs;
+        myGroup.position.z += Math.cos(vrAngle)*vs;
+        spd = vs; joyMoved = true;
+    }
+
     const moving=spd!==0||joyMoved;
     keys.isMoving=moving;
     if(myMixer){myMixer.update(dt);safeAnim(myActions,moving);}
 
-    // ★ 場地邊界限制（不能跑出去）
-    const BOUND = CONFIG.FIELD_SIZE - 1;
-    myGroup.position.x = Math.max(-BOUND, Math.min(BOUND, myGroup.position.x));
-    myGroup.position.z = Math.max(-BOUND, Math.min(BOUND, myGroup.position.z));
+    // ★ 場地邊界限制（硬性夾鉗，不能跑出去）
+    const BOUND = CONFIG.FIELD_SIZE - 2;
+    if(myGroup.position.x >  BOUND){ myGroup.position.x =  BOUND; }
+    if(myGroup.position.x < -BOUND){ myGroup.position.x = -BOUND; }
+    if(myGroup.position.z >  BOUND){ myGroup.position.z =  BOUND; }
+    if(myGroup.position.z < -BOUND){ myGroup.position.z = -BOUND; }
 
     // ★ 碰撞推回（樹木、石頭阻擋）
     const PLAYER_R=0.7;
@@ -1061,15 +1132,26 @@ function animate(){
         p.segments.forEach((s,i)=>{const st=(i+1)*CONFIG.SEG_SPACING;if(p.path[st]) s.position.lerp(p.path[st].pos,0.4);});
     }
 
-    // 攝影機（含震動）
-    const cx=myGroup.position.x+Math.sin(camAngle)*CAM_DIST*Math.cos(camPitch);
-    const cy=myGroup.position.y+Math.sin(camPitch)*CAM_DIST+CAM_H*0.3;
-    const cz=myGroup.position.z+Math.cos(camAngle)*CAM_DIST*Math.cos(camPitch);
-    const shakeX=(Math.random()-.5)*shakeAmount;
-    const shakeY=(Math.random()-.5)*shakeAmount;
-    shakeAmount*=0.85; // 震動衰減
-    camera.position.lerp(new THREE.Vector3(cx+shakeX,cy+shakeY,cz),0.1);
-    camera.lookAt(myGroup.position.x,1.5,myGroup.position.z);
+    // ── 攝影機（VR / 非VR 分別處理）────────────
+    const isVR = renderer.xr.isPresenting;
+    if(isVR){
+        // VR 模式：移動 Rig 到玩家後方，headset 控制攝影機方向
+        const rigX = myGroup.position.x + Math.sin(camAngle)*8;
+        const rigZ = myGroup.position.z + Math.cos(camAngle)*8;
+        vrRig.position.lerp(new THREE.Vector3(rigX, 0, rigZ), 0.12);
+        // VR 中不呼叫 camera.lookAt（headset 自己控制）
+    } else {
+        // 一般模式：攝影機跟隨玩家
+        const cx = myGroup.position.x + Math.sin(camAngle)*CAM_DIST*Math.cos(camPitch);
+        const cy = myGroup.position.y + Math.sin(camPitch)*CAM_DIST + CAM_H*0.3;
+        const cz = myGroup.position.z + Math.cos(camAngle)*CAM_DIST*Math.cos(camPitch);
+        const shakeX = (Math.random()-.5)*shakeAmount;
+        const shakeY = (Math.random()-.5)*shakeAmount;
+        shakeAmount *= 0.85;
+        vrRig.position.set(0,0,0); // 非 VR 模式 rig 在原點
+        camera.position.lerp(new THREE.Vector3(cx+shakeX, cy+shakeY, cz), 0.1);
+        camera.lookAt(myGroup.position.x, 1.5, myGroup.position.z);
+    }
     renderer.render(scene,camera);
 }
 
@@ -1122,9 +1204,11 @@ switchChar(0);
 await preloadFoodGLBs();
 initFirebase();
 
-// ★ VR 按鈕（裝置支援時自動顯示）
-document.body.appendChild(VRButton.createButton(renderer));
-// 改用 setAnimationLoop 支援 WebXR
+// ★ VR 按鈕（只在支援的裝置顯示）
+const vrBtn = VRButton.createButton(renderer);
+vrBtn.style.cssText += 'bottom:140px !important;font-size:13px !important;';
+document.body.appendChild(vrBtn);
+// ★ setAnimationLoop 同時支援 VR 和一般模式，不能用 requestAnimationFrame
 renderer.setAnimationLoop(animate);
 </script>
 </body>
