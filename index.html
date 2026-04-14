@@ -54,6 +54,39 @@
             #shoot-btn{display:flex !important;}
             #hint-ui{display:none;}
         }
+        /* 模式切換按鈕 */
+        #mode-btn{
+            position:fixed;top:15px;left:50%;transform:translateX(-50%);
+            z-index:200;padding:6px 18px;border:none;border-radius:20px;
+            background:linear-gradient(135deg,#ff8844,#ff4488);
+            color:#fff;font-size:13px;cursor:pointer;
+            box-shadow:0 0 15px rgba(255,100,80,0.5);
+            font-family:inherit;letter-spacing:1px;
+        }
+        #mode-btn.gallery{background:linear-gradient(135deg,#44aaff,#8844ff);}
+        /* 畫筆工具列（藝廊模式）*/
+        #brush-toolbar{
+            position:fixed;bottom:72px;left:50%;transform:translateX(-50%);
+            display:none;align-items:center;gap:8px;
+            background:rgba(10,10,30,0.85);padding:7px 14px;
+            border-radius:30px;border:1px solid rgba(255,255,255,0.2);
+            z-index:200;backdrop-filter:blur(8px);
+        }
+        #brush-toolbar.visible{display:flex;}
+        .bcolor{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid rgba(255,255,255,0.3);transition:transform 0.15s;}
+        .bcolor.active{border:3px solid #fff;transform:scale(1.3);}
+        #size-sl{width:55px;accent-color:#00f2ff;}
+        .bbtn{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:#fff;padding:4px 12px;border-radius:12px;cursor:pointer;font-size:11px;}
+        .bbtn.on{background:rgba(255,100,100,0.4);border-color:#ff6666;}
+        /* 手機畫筆鈕（藝廊模式）*/
+        #draw-mobile{
+            position:fixed;bottom:108px;right:20px;width:66px;height:66px;border-radius:50%;
+            background:rgba(255,200,80,0.85);border:3px solid #ffcc44;
+            color:#333;font-size:24px;display:none;align-items:center;justify-content:center;
+            z-index:500;user-select:none;touch-action:none;
+        }
+        #draw-mobile.visible{display:flex !important;}
+        #draw-mobile.on{background:rgba(255,80,80,0.85);border-color:#ff4444;color:#fff;}
     </style>
 </head>
 <body>
@@ -72,7 +105,25 @@
 </div>
 <div id="joystick-zone"><div id="joystick-base"><div id="joystick-knob"></div></div></div>
 <div id="shoot-btn">🔥</div>
+<button id="mode-btn">🖼️ 藝廊模式</button>
 <div id="overlay"><div id="selection-grid"></div></div>
+
+<!-- 畫筆工具列 -->
+<div id="brush-toolbar">
+    <span style="color:#aaa;font-size:11px;">🖌️</span>
+    <div class="bcolor active" style="background:#ff4444" data-c="#ff4444"></div>
+    <div class="bcolor" style="background:#ff8844" data-c="#ff8844"></div>
+    <div class="bcolor" style="background:#ffee44" data-c="#ffee44"></div>
+    <div class="bcolor" style="background:#44ee44" data-c="#44ee44"></div>
+    <div class="bcolor" style="background:#44aaff" data-c="#44aaff"></div>
+    <div class="bcolor" style="background:#aa44ff" data-c="#aa44ff"></div>
+    <div class="bcolor" style="background:#ffffff" data-c="#ffffff"></div>
+    <div class="bcolor" style="background:#ff88cc" data-c="#ff88cc"></div>
+    <input id="size-sl" type="range" min="0.05" max="0.5" step="0.05" value="0.15">
+    <button class="bbtn" id="draw-btn">✏️ 畫</button>
+    <button class="bbtn" id="clear-btn">🗑️</button>
+</div>
+<div id="draw-mobile">✏️</div>
 
 <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
@@ -166,6 +217,18 @@ scene.add(vrRig);
 vrRig.add(camera);
 // VR 模式：攝影機偏移到角色後上方（第三人稱）
 camera.position.set(0, 1.6, 0); // 一般模式會在 animate 覆蓋
+
+// ★ 地形高度查詢（與 buildScene 裡的公式完全一致）
+function getTerrainHeight(wx, wz){
+    const x = wx;
+    const y = -wz; // PlaneGeometry 旋轉後 localY = -worldZ
+    const dist = Math.sqrt(x*x + y*y);
+    const blend = Math.min(1, Math.max(0,(dist-25)/20));
+    return (Math.sin(x*0.1)*2.0
+          + Math.cos(y*0.09)*1.8
+          + Math.sin(x*0.05-y*0.07)*2.2
+          + Math.cos(x*0.03+y*0.04)*1.5) * blend;
+}
 
 function buildScene(){
     scene.background = new THREE.Color(0x87ceeb);
@@ -462,6 +525,7 @@ let touchIds={cam:-1,joy:-1};
 let isHost=false;
 let roundOver=false;
 let roundEndTime=0;
+const pageLoadTime=Date.now(); // ★ 記錄進入時間，防止立即結束
 
 // 嘗試成為主機（只有 session 中沒有有效主機才成功）
 async function tryBecomeHost(){
@@ -560,8 +624,12 @@ async function fillFood(){
 //  回合系統
 // ════════════════════════════════════════
 function updateTimer(){
-    if(!roundEndTime) return;
-    const left=Math.max(0,Math.ceil((roundEndTime-Date.now())/1000));
+    // ★ roundEndTime=0 或還在等待時不倒數不結束
+    if(!roundEndTime || roundEndTime < 1000) return;
+    const now = Date.now();
+    // 非主機剛進入時給 3 秒緩衝，等待 session 同步
+    if(!isHost && (now - pageLoadTime) < 3000) return;
+    const left=Math.max(0,Math.ceil((roundEndTime-now)/1000));
     const m=Math.floor(left/60), s=String(left%60).padStart(2,'0');
     const el=document.getElementById('timer-ui');
     el.textContent=`🕐 ${m}:${s}`;
@@ -990,6 +1058,187 @@ document.addEventListener('touchend',e=>{
 document.getElementById('shoot-btn').addEventListener('touchstart',e=>{e.preventDefault();shoot();},{passive:false});
 document.getElementById('shoot-btn').addEventListener('click',shoot);
 
+
+// ════════════════════════════════════════
+//  模式切換 & 藝廊系統
+// ════════════════════════════════════════
+let galleryMode = false;
+const galleryObjects = [];   // 所有藝廊物件（海報+角色）
+const drawings = [];         // 筆畫粒子
+let isDrawing = false;
+let brushColor = new THREE.Color('#ff4444');
+let brushSize  = 0.15;
+let mouseHeld  = false;
+
+// 藝廊資料（與 students 陣列對應）
+const GALLERY_RADIUS = 30;
+
+function buildGallery(){
+    if(galleryObjects.length > 0) return; // 只建一次
+    const texLoader = new THREE.TextureLoader();
+
+    students.forEach((art, i)=>{
+        // 海報位置：圍成大圓
+        const angle = (i / students.length) * Math.PI * 2;
+        const px    = Math.cos(angle) * GALLERY_RADIUS;
+        const pz    = Math.sin(angle) * GALLERY_RADIUS;
+        const py    = getTerrainHeight(px, pz) + 2.6;
+
+        // ── 外框 ──────────────────────────
+        const frame = new THREE.Mesh(
+            new THREE.BoxGeometry(2.8, 3.6, 0.14),
+            new THREE.MeshLambertMaterial({color:0xddbb77})
+        );
+
+        // ── 海報面 ─────────────────────────
+        const cardMat = new THREE.MeshBasicMaterial({color:new THREE.Color(art.color)});
+        const card    = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 3.1), cardMat);
+        card.position.z = 0.08;
+        texLoader.load(`gallery_${i}.jpg`, tex=>{
+            cardMat.map=tex; cardMat.color.set(0xffffff); cardMat.needsUpdate=true;
+        });
+
+        // ── 姓名標籤 ─────────────────────
+        const nc = document.createElement('canvas');
+        nc.width=512; nc.height=90;
+        const nctx = nc.getContext('2d');
+        nctx.fillStyle='rgba(0,0,0,0.65)';
+        nctx.roundRect(4,4,504,82,12); nctx.fill();
+        nctx.fillStyle='#fff';
+        nctx.font='bold 44px Microsoft JhengHei,sans-serif';
+        nctx.textAlign='center';
+        nctx.fillText(`${i+1}. ${art.name}`, 256, 58);
+        const label = new THREE.Mesh(
+            new THREE.PlaneGeometry(2.4,0.4),
+            new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(nc),transparent:true})
+        );
+        label.position.set(0,-1.85,0.09);
+
+        const pGroup = new THREE.Group();
+        pGroup.add(frame); pGroup.add(card); pGroup.add(label);
+        pGroup.position.set(px, py, pz);
+        pGroup.lookAt(0, py, 0);
+        pGroup.visible = false;
+        scene.add(pGroup);
+        galleryObjects.push(pGroup);
+
+        // ── 3D 角色站在海報旁邊 ──────────
+        const charGroup = new THREE.Group();
+        // 角色站在海報右邊偏前一點
+        const offsetAngle = angle + 0.18;
+        const cx2 = Math.cos(offsetAngle)*(GALLERY_RADIUS-2.8);
+        const cz2 = Math.sin(offsetAngle)*(GALLERY_RADIUS-2.8);
+        charGroup.position.set(cx2, getTerrainHeight(cx2,cz2), cz2);
+        charGroup.rotation.y = angle + Math.PI + 0.3; // 面向中心
+        charGroup.visible = false;
+        scene.add(charGroup);
+        galleryObjects.push(charGroup);
+
+        // 非同步載入角色模型
+        loader.load(`student_${i}.glb`, gltf=>{
+            const model = gltf.scene;
+            model.scale.setScalar(CONFIG.CHAR_SCALE);
+            model.rotation.y = CONFIG.CHAR_MODEL_ROTATE;
+            charGroup.add(model);
+            // 播放 idle 動畫
+            if(gltf.animations[CONFIG.CHAR_IDLE_IDX]){
+                const mx = new THREE.AnimationMixer(model);
+                mx.clipAction(gltf.animations[CONFIG.CHAR_IDLE_IDX]).play();
+                charGroup.userData.mixer = mx;
+            }
+        }, undefined, ()=>{
+            // fallback 膠囊人
+            const body=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,1.4,8),new THREE.MeshLambertMaterial({color:art.color}));
+            body.position.y=1.1; charGroup.add(body);
+            const head=new THREE.Mesh(new THREE.SphereGeometry(0.38,8,8),new THREE.MeshLambertMaterial({color:art.color}));
+            head.position.y=2.1; charGroup.add(head);
+        });
+
+        // 地面光圈
+        const ringCurve = new THREE.EllipseCurve(0,0,1.0,1.0,0,Math.PI*2);
+        const ringShape = new THREE.Shape(ringCurve.getPoints(16));
+        const ring = new THREE.Mesh(
+            new THREE.ShapeGeometry(ringShape),
+            new THREE.MeshBasicMaterial({color:new THREE.Color(art.color),transparent:true,opacity:0.25,side:THREE.DoubleSide})
+        );
+        ring.rotation.x=-Math.PI/2;
+        ring.position.set(cx2, getTerrainHeight(cx2,cz2)+0.05, cz2);
+        ring.visible=false;
+        scene.add(ring);
+        galleryObjects.push(ring);
+    });
+
+    console.log('[Gallery] 建立完成，共', galleryObjects.length, '個物件');
+}
+
+// 切換模式
+function toggleMode(){
+    galleryMode = !galleryMode;
+    buildGallery(); // 確保已建立
+
+    // 顯示/隱藏藝廊物件
+    galleryObjects.forEach(o=>o.visible=galleryMode);
+
+    // 切換 UI
+    const gameUIs = ['#score-ui','#timer-ui','#host-badge','#shoot-btn'];
+    gameUIs.forEach(sel=>{
+        const el=document.querySelector(sel);
+        if(el) el.style.display=galleryMode?'none':'';
+    });
+    document.getElementById('brush-toolbar').classList.toggle('visible', galleryMode);
+    document.getElementById('draw-mobile').classList.toggle('visible', galleryMode);
+    document.getElementById('mode-btn').textContent = galleryMode ? '🎮 遊戲模式' : '🖼️ 藝廊模式';
+    document.getElementById('mode-btn').classList.toggle('gallery', galleryMode);
+
+    // 藝廊模式：把相機移到中間俯看
+    if(galleryMode){
+        myGroup.position.set(0,0,0);
+        showFlash('🖼️ 歡迎來到藝廊！');
+    } else {
+        showFlash('🎮 回到遊戲！');
+    }
+}
+
+document.getElementById('mode-btn').addEventListener('click', toggleMode);
+
+// ── 畫筆系統 ──────────────────────────────
+function getBrushWorldPos(){
+    const dir=new THREE.Vector3(); camera.getWorldDirection(dir);
+    return camera.getWorldPosition(new THREE.Vector3()).addScaledVector(dir,3.5);
+}
+function drawDot(){
+    const geo=new THREE.SphereGeometry(brushSize,6,6);
+    const mat=new THREE.MeshBasicMaterial({color:brushColor.clone()});
+    const pt=new THREE.Mesh(geo,mat);
+    pt.position.copy(getBrushWorldPos());
+    scene.add(pt); drawings.push(pt);
+    if(drawings.length>3000){scene.remove(drawings.shift());}
+}
+function clearDrawings(){
+    drawings.forEach(d=>scene.remove(d)); drawings.length=0;
+}
+
+document.querySelectorAll('.bcolor').forEach(el=>{
+    el.addEventListener('click',()=>{
+        document.querySelectorAll('.bcolor').forEach(e=>e.classList.remove('active'));
+        el.classList.add('active'); brushColor.set(el.dataset.c);
+    });
+});
+document.getElementById('size-sl').addEventListener('input',e=>brushSize=parseFloat(e.target.value));
+document.getElementById('draw-btn').addEventListener('click',()=>{
+    isDrawing=!isDrawing;
+    document.getElementById('draw-btn').classList.toggle('on',isDrawing);
+    document.getElementById('draw-btn').textContent=isDrawing?'🛑 停':'✏️ 畫';
+});
+document.getElementById('clear-btn').addEventListener('click',clearDrawings);
+document.getElementById('draw-mobile').addEventListener('touchstart',e=>{
+    e.preventDefault(); isDrawing=!isDrawing;
+    document.getElementById('draw-mobile').classList.toggle('on',isDrawing);
+    document.getElementById('draw-mobile').textContent=isDrawing?'🛑':'✏️';
+},{passive:false});
+renderer.domElement.addEventListener('mousedown',e=>{if(e.button===0) mouseHeld=true;});
+renderer.domElement.addEventListener('mouseup',  e=>{if(e.button===0) mouseHeld=false;});
+
 // ════════════════════════════════════════
 //  主迴圈
 // ════════════════════════════════════════
@@ -1030,6 +1279,9 @@ function animate(){
         }
     }
 
+    // ── 藝廊模式畫筆（按住左鍵或已開啟畫筆模式）────
+    if(galleryMode && isDrawing && mouseHeld) drawDot();
+
     // ── VR 搖桿移動 ───────────────────────────────
     if(renderer.xr.isPresenting && (Math.abs(vrMoveX)>0.15 || Math.abs(vrMoveZ)>0.15)){
         const vrAngle = Math.atan2(vrMoveX, vrMoveZ) + camAngle; // ★ 移除負號修前後
@@ -1064,6 +1316,10 @@ function animate(){
             myGroup.position.z+=dz*push;
         }
     }
+
+    // ★ 地形跟隨：讓玩家Y高度貼著地面
+    const th = getTerrainHeight(myGroup.position.x, myGroup.position.z);
+    myGroup.position.y = THREE.MathUtils.lerp(myGroup.position.y, th, 0.18);
 
     // 路徑 & 尾巴
     myPath.unshift({pos:myGroup.position.clone()});
@@ -1150,12 +1406,21 @@ function animate(){
     }
 
     // ── 攝影機（VR / 非VR 分別處理）────────────
+    // ── 藝廊角色動畫更新 ────────────────────────
+    if(galleryMode){
+        galleryObjects.forEach(o=>{
+            if(o.userData.mixer) o.userData.mixer.update(dt);
+        });
+    }
+
     const isVR = renderer.xr.isPresenting;
     if(isVR){
         // VR 模式：移動 Rig 到玩家後方，headset 控制攝影機方向
         const rigX = myGroup.position.x + Math.sin(camAngle)*10;
         const rigZ = myGroup.position.z + Math.cos(camAngle)*10;
-        vrRig.position.lerp(new THREE.Vector3(rigX, 1.6, rigZ), 0.12); // ★ 1.6m 眼睛高度
+        // ★ VR 高度 = 地形高度 + 1.6m 眼睛高度
+        const vrGroundH = getTerrainHeight(myGroup.position.x, myGroup.position.z);
+        vrRig.position.lerp(new THREE.Vector3(rigX, vrGroundH+1.6, rigZ), 0.12);
         // VR 中不呼叫 camera.lookAt（headset 自己控制）
     } else {
         // 一般模式：攝影機跟隨玩家
@@ -1189,8 +1454,8 @@ function initUI(){
             c.style.cssText+='border-color:#00f2ff;background:rgba(0,242,255,0.15);';
             c.title='開啟遊戲';
         } else if(i===22){
-            // 虛擬藝廊連結（先預留，之後填入真實網址）
-            c.onclick=()=>window.open('https://gp01002.github.io/GAME/','_blank'); // ← 之後改成藝廊網址
+            // 虛擬藝廊：直接切換到藝廊模式！
+            c.onclick=()=>{ if(!galleryMode) toggleMode(); };
             c.style.cssText+='border-color:#ff88ff;background:rgba(255,136,255,0.15);';
             c.title='開啟虛擬藝廊';
         } else {
@@ -1206,6 +1471,11 @@ function updateCardUI(idxs){
     });
 }
 async function switchChar(idx){
+    // ★ VR 模式中不切換角色（避免 GLB 載入造成卡頓）
+    if(renderer.xr.isPresenting){
+        showFlash('🥽 VR 中請先退出再換角色');
+        return;
+    }
     myIdx=idx;
     document.querySelectorAll('.character-card').forEach((c,i)=>c.classList.toggle('active',i===idx));
     const r=await loadModel(idx,myGroup); myMixer=r.mixer; myActions=r.actions;
