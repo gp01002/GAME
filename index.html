@@ -1063,106 +1063,170 @@ document.getElementById('shoot-btn').addEventListener('click',shoot);
 
 
 // ════════════════════════════════════════
-//  模式切換 & 藝廊系統
+//  模式切換 & 藝廊系統（獨立場景）
 // ════════════════════════════════════════
 let galleryMode = false;
-const galleryObjects = [];   // 所有藝廊物件（海報+角色）
-const drawings = [];         // 筆畫粒子
-let isDrawing = false;
-let brushColor = new THREE.Color('#ff4444');
-let brushSize  = 0.15;
-let mouseHeld  = false;
+let galleryBuilt = false;
 
-// 藝廊資料（與 students 陣列對應）
-const GALLERY_RADIUS = 30;
+// 藝廊專用場景（完全獨立）
+const galleryScene  = new THREE.Scene();
+const galleryCamera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 300);
+galleryScene.background = new THREE.Color(0x0a0a1e);
+galleryScene.fog = new THREE.Fog(0x0a0a1e, 40, 120);
 
+// 第一人稱視角控制
+const fpPos    = new THREE.Vector3(0, 1.6, 8);
+const fpYaw    = {v:0};   // 左右旋轉
+let   fpDragX  = 0, fpDragging = false;
+
+// 畫筆
+const drawings  = [];
+let   isDrawing = false;
+let   brushColor = new THREE.Color('#ff4444');
+let   brushSize  = 0.15;
+let   mouseHeld  = false;
+
+// ── 建立藝廊場景（只呼叫一次）────────────────────
 function buildGallery(){
-    if(galleryObjects.length > 0) return; // 只建一次
+    if(galleryBuilt) return;
+    galleryBuilt = true;
+
+    // 藝廊燈光（冷藍白色，高對比）
+    galleryScene.add(new THREE.AmbientLight(0xaabbdd, 1.2));
+    const mainLight = new THREE.DirectionalLight(0xeeeeff, 2.5);
+    mainLight.position.set(0,50,0); galleryScene.add(mainLight);
+    galleryScene.add(new THREE.HemisphereLight(0x5566aa,0x222244,1.0));
+    // 展場聚光氛圍
+    [-1,1].forEach(s=>{
+        const spot=new THREE.SpotLight(0xaaccff,3,60,Math.PI/5,0.4);
+        spot.position.set(s*15,18,0); galleryScene.add(spot);
+    });
+
+    // 白色大理石地板（高反射）
+    const floorMat = new THREE.MeshStandardMaterial({
+        color:0xf0f0ff, metalness:0.75, roughness:0.04,
+        envMapIntensity:1.5
+    });
+    const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(200,200), floorMat);
+    floorMesh.rotation.x = -Math.PI/2;
+    galleryScene.add(floorMesh);
+
+    // 地板大理石紋路（細格線）
+    const gridFine = new THREE.GridHelper(200,80,0xccccee,0xddddff);
+    gridFine.material.transparent=true; gridFine.material.opacity=0.12;
+    gridFine.position.y=0.01; galleryScene.add(gridFine);
+
+    // 藝廊背景：深藍夜空或 sky2.jpg
+    new THREE.TextureLoader().load('sky2.jpg', t=>{
+        t.mapping=THREE.EquirectangularReflectionMapping;
+        galleryScene.background=t;
+    }, undefined, ()=>{
+        // fallback：漸層深夜藍
+        galleryScene.background=new THREE.Color(0x060614);
+    });
+    galleryScene.fog = new THREE.Fog(0x060614, 45, 110);
+
+    // 椅子（8 張）
+    const bMat=new THREE.MeshStandardMaterial({color:0x334466,metalness:0.5,roughness:0.3});
+    const lMat=new THREE.MeshStandardMaterial({color:0x7788aa,metalness:0.6,roughness:0.2});
+    [{x:0,z:6},{x:0,z:-6},{x:6,z:0},{x:-6,z:0},
+     {x:12,z:12},{x:-12,z:12},{x:12,z:-12},{x:-12,z:-12}].forEach(({x,z})=>{
+        const g=new THREE.Group();
+        const seat=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.18,0.65),bMat);
+        seat.position.y=0.48; g.add(seat);
+        const back=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.55,0.1),bMat);
+        back.position.set(0,0.88,0.27); g.add(back);
+        [[-1,0.15,-0.25],[1,0.15,-0.25],[-1,0.15,0.25],[1,0.15,0.25]].forEach(([lx,ly,lz])=>{
+            const leg=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.38,0.08),lMat);
+            leg.position.set(lx,ly,lz); g.add(leg);
+        });
+        const angle=Math.atan2(x,z);
+        g.position.set(x,0,z); g.rotation.y=angle+Math.PI/2;
+        galleryScene.add(g);
+    });
+
+    // ── 場地邊界柱（藝廊感）────────────────────
+    const pillarMat=new THREE.MeshStandardMaterial({color:0xccccff,emissive:0x8888ff,emissiveIntensity:0.4,metalness:0.8,roughness:0.1});
+    for(let i=0;i<20;i++){
+        const a=i/20*Math.PI*2, d=36;
+        const px2=Math.cos(a)*d, pz2=Math.sin(a)*d;
+        const h=2.5+Math.sin(i*0.7)*1.2;
+        const pillar=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.22,h,8),pillarMat);
+        pillar.position.set(px2,h/2,pz2); galleryScene.add(pillar);
+        const glow=new THREE.PointLight(0x8888ff,0.8,8);
+        glow.position.set(px2,h+0.5,pz2); galleryScene.add(glow);
+    }
+
+    // ── 中央發光地標 ────────────────────────────
+    const centerMat=new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xaaaaff,emissiveIntensity:0.6,metalness:0.9,roughness:0.05});
+    const centerPillar=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.5,0.1,12),centerMat);
+    centerPillar.position.set(0,0.05,0); galleryScene.add(centerPillar);
+    const centerLight=new THREE.PointLight(0xaaaaff,2.5,25);
+    centerLight.position.set(0,1.5,0); galleryScene.add(centerLight);
+
+    // ── 海報 + 角色（圓形排列）────────────────────
     const texLoader = new THREE.TextureLoader();
+    const RADIUS = 28;
+    // 只處理 0-20（排除 21=藝廊 22=遊戲連結）
+    const artStudents = students.slice(0, 21);
 
-    students.forEach((art, i)=>{
-        // 海報位置：圍成大圓
-        const angle = (i / students.length) * Math.PI * 2;
-        const px    = Math.cos(angle) * GALLERY_RADIUS;
-        const pz    = Math.sin(angle) * GALLERY_RADIUS;
-        const py    = getTerrainHeight(px, pz) + 3.2;
+    artStudents.forEach((art, i)=>{
+        const angle = (i / artStudents.length) * Math.PI * 2;
+        const px = Math.cos(angle)*RADIUS;
+        const pz = Math.sin(angle)*RADIUS;
 
-        // ── 外框（放大）────────────────────
-        const frame = new THREE.Mesh(
-            new THREE.BoxGeometry(4.2, 5.2, 0.14),
-            new THREE.MeshLambertMaterial({color:0xddbb77})
-        );
+        // 外框
+        const frame=new THREE.Mesh(new THREE.BoxGeometry(4.2,5.2,0.14),
+            new THREE.MeshLambertMaterial({color:0xddbb77}));
+        // 海報
+        const cardMat=new THREE.MeshBasicMaterial({color:new THREE.Color(art.color)});
+        const card=new THREE.Mesh(new THREE.PlaneGeometry(3.8,4.8),cardMat);
+        card.position.z=0.08;
 
-        // ── 海報面（放大）──────────────────
-        const cardMat = new THREE.MeshBasicMaterial({color:new THREE.Color(art.color)});
-        const card    = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 4.8), cardMat);
-        card.position.z = 0.08;
-        // 用 fetch 確認檔案存在後再載入（解決 404 靜默失敗問題）
-        // 只嘗試載入 0-18 範圍的圖，超出範圍顯示彩色卡片
-        if(i <= 18){
-            (async ()=>{
-                const candidates=[`gallery_${i}.png`,`gallery_${i}.jpg`];
-                for(const url of candidates){
+        // 圖片載入（fetch 確認）
+        if(i<=18){
+            (async()=>{
+                for(const url of [`gallery_${i}.png`,`gallery_${i}.jpg`]){
                     try{
-                        const res=await fetch(url,{method:'HEAD'});
-                        if(res.ok){
-                            texLoader.load(url,tex=>{
-                                cardMat.map=tex;
-                                cardMat.color.set(0xffffff);
-                                cardMat.needsUpdate=true;
-                            });
-                            break;
-                        }
+                        const r=await fetch(url,{method:'HEAD'});
+                        if(r.ok){texLoader.load(url,t=>{cardMat.map=t;cardMat.color.set(0xffffff);cardMat.needsUpdate=true;});break;}
                     }catch(e){}
                 }
             })();
         }
 
-        // ── 姓名標籤 ─────────────────────
-        const nc = document.createElement('canvas');
-        nc.width=512; nc.height=90;
-        const nctx = nc.getContext('2d');
-        nctx.fillStyle='rgba(0,0,0,0.65)';
-        nctx.roundRect(4,4,504,82,12); nctx.fill();
-        nctx.fillStyle='#fff';
-        nctx.font='bold 44px Microsoft JhengHei,sans-serif';
-        nctx.textAlign='center';
-        nctx.fillText(`${i+1}. ${art.name}`, 256, 58);
-        const label = new THREE.Mesh(
-            new THREE.PlaneGeometry(3.8,0.55),
-            new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(nc),transparent:true})
-        );
+        // 姓名標籤
+        const nc=document.createElement('canvas');
+        nc.width=512;nc.height=88;
+        const nctx=nc.getContext('2d');
+        nctx.fillStyle='rgba(0,0,0,0.7)'; nctx.fillRect(0,0,512,88);
+        nctx.fillStyle='#fff'; nctx.font='bold 42px Microsoft JhengHei,sans-serif';
+        nctx.textAlign='center'; nctx.fillText(`${i+1}. ${art.name}`,256,58);
+        const label=new THREE.Mesh(new THREE.PlaneGeometry(3.8,0.55),
+            new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(nc),transparent:true}));
         label.position.set(0,-2.65,0.09);
 
-        const pGroup = new THREE.Group();
-        pGroup.add(frame); pGroup.add(card); pGroup.add(label);
-        pGroup.position.set(px, py, pz);
-        pGroup.lookAt(0, py, 0);
-        pGroup.visible = false;
-        scene.add(pGroup);
-        galleryObjects.push(pGroup);
+        const pGroup=new THREE.Group();
+        pGroup.add(frame,card,label);
+        pGroup.position.set(px,3.2,pz);
+        pGroup.lookAt(0,3.2,0);
+        galleryScene.add(pGroup);
 
-        // ── 3D 角色站在海報旁邊 ──────────
-        const charGroup = new THREE.Group();
-        // 角色站在海報右邊偏前一點
-        const offsetAngle = angle + 0.18;
-        const cx2 = Math.cos(offsetAngle)*(GALLERY_RADIUS-2.8);
-        const cz2 = Math.sin(offsetAngle)*(GALLERY_RADIUS-2.8);
-        charGroup.position.set(cx2, getTerrainHeight(cx2,cz2), cz2);
-        charGroup.rotation.y = angle + Math.PI + 0.3; // 面向中心
-        charGroup.visible = false;
-        scene.add(charGroup);
-        galleryObjects.push(charGroup);
+        // ── 角色（靜態，面向圓心）──────────────────
+        const charGroup=new THREE.Group();
+        const offsetAngle=angle+0.2;
+        const cx2=Math.cos(offsetAngle)*(RADIUS-3.2);
+        const cz2=Math.sin(offsetAngle)*(RADIUS-3.2);
+        charGroup.position.set(cx2,0,cz2);
+        charGroup.rotation.y=angle+Math.PI; // 面向圓心
+        galleryScene.add(charGroup);
 
-        // 非同步載入角色模型
-        loader.load(`student_${i}.glb`, gltf=>{
-            const model = gltf.scene;
+        loader.load(`student_${i}.glb`,gltf=>{
+            const model=gltf.scene;
             model.scale.setScalar(CONFIG.CHAR_SCALE);
-            model.rotation.y = CONFIG.CHAR_MODEL_ROTATE;
+            model.rotation.y=CONFIG.CHAR_MODEL_ROTATE;
             charGroup.add(model);
-            // ★ 藝廊角色靜態展示（不播動畫，省效能）
-            // 不設 mixer，只顯示靜態模型
-        }, undefined, ()=>{
+        },undefined,()=>{
             // fallback 膠囊人
             const body=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,1.4,8),new THREE.MeshLambertMaterial({color:art.color}));
             body.position.y=1.1; charGroup.add(body);
@@ -1171,147 +1235,60 @@ function buildGallery(){
         });
 
         // 地面光圈
-        const ringCurve = new THREE.EllipseCurve(0,0,1.0,1.0,0,Math.PI*2);
-        const ringShape = new THREE.Shape(ringCurve.getPoints(16));
-        const ring = new THREE.Mesh(
-            new THREE.ShapeGeometry(ringShape),
-            new THREE.MeshBasicMaterial({color:new THREE.Color(art.color),transparent:true,opacity:0.25,side:THREE.DoubleSide})
-        );
-        ring.rotation.x=-Math.PI/2;
-        ring.position.set(cx2, getTerrainHeight(cx2,cz2)+0.05, cz2);
-        ring.visible=false;
-        scene.add(ring);
-        galleryObjects.push(ring);
+        const ringCurve=new THREE.EllipseCurve(0,0,1.1,1.1,0,Math.PI*2);
+        const ring=new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(ringCurve.getPoints(14))),
+            new THREE.MeshBasicMaterial({color:new THREE.Color(art.color),transparent:true,opacity:0.25,side:THREE.DoubleSide}));
+        ring.rotation.x=-Math.PI/2; ring.position.set(cx2,0.05,cz2);
+        galleryScene.add(ring);
     });
 
-    console.log('[Gallery] 建立完成，共', galleryObjects.length, '個物件');
+    console.log('[Gallery] 藝廊場景建立完成');
 }
 
-// 切換模式
-// 藝廊專用地面（大理石反光）
-let galleryFloor = null;
-let galleryBenches = [];
-let galleryEntered = false;
-
-function buildGalleryScene(){
-    if(galleryEntered) return;
-    galleryEntered = true;
-
-    // ── 大理石反光地面（替換草地）──────────────
-    galleryFloor = new THREE.Mesh(
-        new THREE.PlaneGeometry(200,200,1,1), // ★ 縮小減少頂點
-        new THREE.MeshStandardMaterial({
-            color: 0xe8e8f0,
-            metalness: 0.55,
-            roughness: 0.1,
-        })
-    );
-    galleryFloor.rotation.x = -Math.PI/2;
-    galleryFloor.position.y = 0.02;
-    // 大理石網格線
-    const grid2 = new THREE.GridHelper(300, 30, 0xbbbbcc, 0xccccdd);
-    grid2.position.y = 0.03;
-    grid2.material.transparent = true;
-    grid2.material.opacity = 0.3;
-    galleryFloor.userData.grid = grid2;
-    scene.add(galleryFloor);
-    scene.add(grid2);
-    galleryObjects.push(galleryFloor, grid2);
-
-    // ── 長條幾何椅子 ─────────────────────────
-    const benchMat = new THREE.MeshStandardMaterial({color:0x444466, metalness:0.5, roughness:0.3});
-    const legMat   = new THREE.MeshStandardMaterial({color:0x888899, metalness:0.7, roughness:0.2});
-    const benchPositions = [
-        {x:0,  z:8},  {x:0,  z:-8},
-        {x:8,  z:0},  {x:-8, z:0},
-        {x:14, z:14}, {x:-14,z:14},
-        {x:14, z:-14},{x:-14,z:-14},
-    ];
-    benchPositions.forEach(({x,z},bi)=>{
-        const angle = Math.atan2(x,z);
-        const g = new THREE.Group();
-        // 座面
-        const seat = new THREE.Mesh(new THREE.BoxGeometry(2.8,0.2,0.7), benchMat);
-        seat.position.y = 0.5; g.add(seat);
-        // 靠背
-        const back = new THREE.Mesh(new THREE.BoxGeometry(2.8,0.6,0.12), benchMat);
-        back.position.set(0,0.95,0.3); g.add(back);
-        // 腳 x4
-        [[-1.1,0.14,-0.25],[1.1,0.14,-0.25],[-1.1,0.14,0.25],[1.1,0.14,0.25]].forEach(([lx,ly,lz])=>{
-            const leg=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.4,0.1),legMat);
-            leg.position.set(lx,ly,lz); g.add(leg);
-        });
-        g.position.set(x, 0, z);
-        g.rotation.y = angle + Math.PI/2;
-        g.visible = false;
-        scene.add(g);
-        galleryObjects.push(g);
-        galleryBenches.push(g);
-    });
-}
-
+// ── 模式切換 ───────────────────────────────────
 function toggleMode(){
     galleryMode = !galleryMode;
-    buildGallery();
-    buildGalleryScene();
 
-    // 顯示/隱藏藝廊物件
-    galleryObjects.forEach(o=>o.visible=galleryMode);
-
-    // 遊戲 UI 顯示/隱藏
-    ['#score-ui','#timer-ui','#host-badge','#shoot-btn','#overlay'].forEach(sel=>{
-        const el=document.querySelector(sel);
-        if(el) el.style.display = galleryMode ? 'none' : '';
-    });
-    document.getElementById('brush-toolbar').classList.toggle('visible', galleryMode);
-    document.getElementById('draw-mobile').classList.toggle('visible', galleryMode);
-    document.getElementById('mode-btn').textContent = galleryMode ? '🎮 遊戲模式' : '🖼️ 藝廊模式';
-    document.getElementById('mode-btn').classList.toggle('gallery', galleryMode);
-
-    // 找遊戲地板（名稱標記）
-    const gameFloorMesh = scene.getObjectByName('gameFloor');
+    const modeBtn=document.getElementById('mode-btn');
+    modeBtn.textContent = galleryMode ? '🎮 遊戲模式' : '🖼️ 藝廊模式';
+    modeBtn.classList.toggle('gallery', galleryMode);
 
     if(galleryMode){
-        if(gameFloorMesh) gameFloorMesh.visible = false; // ★ 隱藏草地
-        // 隱藏遊戲食物 mesh（不刪除，只隱藏）
-        Object.values(foodMeshes).forEach(m=>{ if(m) m.visible=false; });
-        // 隱藏遊戲格線
-        scene.traverse(o=>{ if(o.isGridHelper) o.visible=false; });
-        // 換天空
-        // sky2.jpg 若存在就用，否則用深藍夜空色
-        new THREE.TextureLoader().load('sky2.jpg', t=>{
-            t.mapping=THREE.EquirectangularReflectionMapping;
-            scene.background=t;
-        }, undefined, ()=>{
-            scene.background=new THREE.Color(0x0a0a1e);
+        buildGallery(); // 第一次才建立
+
+        // 隱藏所有遊戲 UI
+        ['#score-ui','#timer-ui','#host-badge','#shoot-btn','#overlay',
+         '#status-ui','#hint-ui'].forEach(sel=>{
+            const el=document.querySelector(sel);
+            if(el) el.style.display='none';
         });
-        scene.fog = new THREE.Fog(0x0a0a1e, 50, 140);
-        // 藝廊專用柔和燈光
-        scene.children.filter(o=>o.isAmbientLight).forEach(l=>{ l.intensity=1.8; });
-        myGroup.position.set(0,0,8);
-        showFlash('🖼️ 歡迎來到虛擬藝廊！');
-        // ★ 完全登出 Firebase，釋放所有連線資源
+        document.getElementById('brush-toolbar').classList.add('visible');
+        document.getElementById('draw-mobile').classList.add('visible');
+        document.getElementById('status-ui').style.display='block';
+
+        // 完全登出 Firebase
         if(typeof unsubFood==='function'){unsubFood();unsubFood=null;}
         if(typeof unsubPlayers==='function'){unsubPlayers();unsubPlayers=null;}
         Object.keys(others).forEach(uid=>removeOther(uid));
         Object.keys(foodMeshes).forEach(id=>delFoodMesh(id));
         if(window._fbAuth) signOut(window._fbAuth).catch(()=>{});
         userId=null; isHost=false;
-        document.getElementById('host-badge').style.display='none';
         setStatus('🖼️ 藝廊模式','（離線）');
+
+        // 重置第一人稱位置
+        fpPos.set(0,1.6,8); fpYaw.v=Math.PI;
+        showFlash('🖼️ 歡迎來到藝廊！');
+
     } else {
-        if(gameFloorMesh) gameFloorMesh.visible = true; // ★ 還原草地
-        // 還原食物 mesh 可見
-        Object.values(foodMeshes).forEach(m=>{ if(m) m.visible=true; });
-        // 還原格線
-        scene.traverse(o=>{ if(o.isGridHelper) o.visible=true; });
-        new THREE.TextureLoader().load('sky.jpg', t=>{
-            t.mapping=THREE.EquirectangularReflectionMapping;
-            scene.background=t;
+        // 還原遊戲 UI
+        ['#score-ui','#timer-ui','#shoot-btn','#overlay','#status-ui','#hint-ui'].forEach(sel=>{
+            const el=document.querySelector(sel);
+            if(el) el.style.display='';
         });
-        scene.fog = new THREE.Fog(0x87ceeb, 55, 140);
-        showFlash('🎮 回到遊戲！');
-        // ★ 重新匿名登入並恢復 Firestore 監聽
+        document.getElementById('brush-toolbar').classList.remove('visible');
+        document.getElementById('draw-mobile').classList.remove('visible');
+
+        // 重新登入
         setStatus('🔄 重新連線中...');
         if(window._fbAuth && db){
             signInAnonymously(window._fbAuth).then(cred=>{
@@ -1323,7 +1300,7 @@ function toggleMode(){
                     const live=new Set(snap.docs.map(d=>d.id));
                     Object.keys(foodMeshes).forEach(id=>{if(!live.has(id)) delFoodMesh(id);});
                     snap.forEach(d=>addFoodMesh(d.id,d.data().x,d.data().z,d.data().t));
-                    setStatus('✅ 已連線',`WASD / 搖桿 移動　🍎 ${snap.size}`);
+                    setStatus('✅ 已連線',`WASD/搖桿　🍎 ${snap.size}`);
                 });
                 unsubPlayers=onSnapshot(pCol,snap=>{
                     const liveIds=new Set(snap.docs.map(d=>d.id));
@@ -1333,7 +1310,7 @@ function toggleMode(){
                             if(typeof data.segCount==='number'&&data.segCount<myTail.length){
                                 const lost=myTail.length-data.segCount;
                                 for(let i=0;i<lost;i++) removeTail();
-                                showFlash(`💀 被打中！-${lost}`);updateScore();screenShake(0.5);
+                                showFlash(`💀-${lost}`);updateScore();screenShake(0.5);
                             }
                             return;
                         }
@@ -1345,27 +1322,28 @@ function toggleMode(){
                 tryBecomeHost();
             }).catch(e=>setStatus('⚠️ 連線失敗',e.message));
         }
+        showFlash('🎮 回到遊戲！');
     }
 }
 
 document.getElementById('mode-btn').addEventListener('click', toggleMode);
+// 角色列第 21 格也觸發
+// (在 initUI 裡設定)
 
-// ── 畫筆系統 ──────────────────────────────
+// ── 畫筆 ──────────────────────────────────────
 function getBrushWorldPos(){
-    const dir=new THREE.Vector3(); camera.getWorldDirection(dir);
-    return camera.getWorldPosition(new THREE.Vector3()).addScaledVector(dir,3.5);
+    const dir=new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(0,fpYaw.v,0));
+    return new THREE.Vector3().copy(fpPos).addScaledVector(dir,3.5);
 }
 function drawDot(){
     const geo=new THREE.SphereGeometry(brushSize,6,6);
     const mat=new THREE.MeshBasicMaterial({color:brushColor.clone()});
     const pt=new THREE.Mesh(geo,mat);
     pt.position.copy(getBrushWorldPos());
-    scene.add(pt); drawings.push(pt);
-    if(drawings.length>3000){scene.remove(drawings.shift());}
+    galleryScene.add(pt); drawings.push(pt);
+    if(drawings.length>2000){galleryScene.remove(drawings.shift());}
 }
-function clearDrawings(){
-    drawings.forEach(d=>scene.remove(d)); drawings.length=0;
-}
+function clearDrawings(){ drawings.forEach(d=>galleryScene.remove(d)); drawings.length=0; }
 
 document.querySelectorAll('.bcolor').forEach(el=>{
     el.addEventListener('click',()=>{
@@ -1383,10 +1361,15 @@ document.getElementById('clear-btn').addEventListener('click',clearDrawings);
 document.getElementById('draw-mobile').addEventListener('touchstart',e=>{
     e.preventDefault(); isDrawing=!isDrawing;
     document.getElementById('draw-mobile').classList.toggle('on',isDrawing);
-    document.getElementById('draw-mobile').textContent=isDrawing?'🛑':'✏️';
 },{passive:false});
-renderer.domElement.addEventListener('mousedown',e=>{if(e.button===0) mouseHeld=true;});
-renderer.domElement.addEventListener('mouseup',  e=>{if(e.button===0) mouseHeld=false;});
+renderer.domElement.addEventListener('mousedown',e=>{
+    if(e.button===0) mouseHeld=true;
+    if(galleryMode&&e.button===0&&!isDrawing){fpDragging=true; fpDragX=e.clientX;}
+});
+renderer.domElement.addEventListener('mousemove',e=>{
+    if(galleryMode&&fpDragging) { fpYaw.v+=(e.clientX-fpDragX)*0.004; fpDragX=e.clientX; }
+});
+renderer.domElement.addEventListener('mouseup',e=>{ mouseHeld=false; fpDragging=false; });
 
 // ════════════════════════════════════════
 //  主迴圈
@@ -1400,26 +1383,26 @@ function animate(){
     foodBob+=dt*2;
     updateTimer();
     tickWeather(dt);
-    // 藝廊模式：遊戲完全停止，只跑藝廊邏輯
+    // ★ 藝廊模式：渲染完全獨立的藝廊場景
     if(galleryMode){
-        // 藝廊角色已靜態展示，無需 mixer 更新
-        let gs=0;
-        if(keys['w']||keys['arrowup'])    gs= 0.14;
-        if(keys['s']||keys['arrowdown'])  gs=-0.14;
-        if(keys['a']||keys['arrowleft'])  camAngle+=0.05;
-        if(keys['d']||keys['arrowright']) camAngle-=0.05;
-        if(gs!==0){myGroup.position.x+=Math.sin(camAngle)*gs;myGroup.position.z+=Math.cos(camAngle)*gs;}
-        if(joyActive){const d=Math.hypot(joyX,joyY);if(d>0.1){const wa=Math.atan2(joyX,joyY)+camAngle;myGroup.position.x+=Math.sin(wa)*0.14*d;myGroup.position.z+=Math.cos(wa)*0.14*d;}}
-        myGroup.position.x=Math.max(-50,Math.min(50,myGroup.position.x));
-        myGroup.position.z=Math.max(-50,Math.min(50,myGroup.position.z));
+        const GSPEED=0.16;
+        if(keys['w']||keys['arrowup'])   {fpPos.x+=Math.sin(fpYaw.v)*GSPEED;fpPos.z-=Math.cos(fpYaw.v)*GSPEED;}
+        if(keys['s']||keys['arrowdown']) {fpPos.x-=Math.sin(fpYaw.v)*GSPEED;fpPos.z+=Math.cos(fpYaw.v)*GSPEED;}
+        if(keys['a']||keys['arrowleft']) fpYaw.v-=0.04;
+        if(keys['d']||keys['arrowright'])fpYaw.v+=0.04;
+        if(joyActive){
+            const d=Math.hypot(joyX,joyY);
+            if(d>0.1){
+                const a=fpYaw.v+Math.atan2(joyX,joyY);
+                fpPos.x+=Math.sin(a)*GSPEED*d; fpPos.z-=Math.cos(a)*GSPEED*d;
+            }
+        }
+        fpPos.x=Math.max(-55,Math.min(55,fpPos.x));
+        fpPos.z=Math.max(-55,Math.min(55,fpPos.z));
         if(isDrawing&&mouseHeld) drawDot();
-        vrRig.position.set(0,0,0);
-        const gx=myGroup.position.x+Math.sin(camAngle)*14*Math.cos(camPitch);
-        const gy=Math.sin(camPitch)*14+3;
-        const gz=myGroup.position.z+Math.cos(camAngle)*14*Math.cos(camPitch);
-        camera.position.lerp(new THREE.Vector3(gx,gy,gz),0.1);
-        camera.lookAt(myGroup.position.x,1.5,myGroup.position.z);
-        renderer.render(scene,camera);
+        galleryCamera.position.copy(fpPos);
+        galleryCamera.rotation.set(0, fpYaw.v+Math.PI, 0);
+        renderer.render(galleryScene, galleryCamera);
         return;
     }
 
@@ -1653,7 +1636,11 @@ async function switchChar(idx){
     const r=await loadModel(idx,myGroup); myMixer=r.mixer; myActions=r.actions;
 }
 
-addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+addEventListener('resize',()=>{
+    camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+    galleryCamera.aspect=innerWidth/innerHeight; galleryCamera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight);
+});
 
 // ════════════════════════════════════════
 //  啟動
