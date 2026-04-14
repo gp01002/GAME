@@ -136,8 +136,11 @@ const students = [
     {name:"金煜喬",color:0xaa8866},{name:"陳品霖",color:0x888888},
     {name:"許博勛",color:0xffaa00},{name:"陳湘妮",color:0xffeeee},
     {name:"劉奕汝",color:0xffcccc},{name:"蔡明樺",color:0xccccff},
-    {name:"鍾凱羽",color:0xccffcc},{name:"葉子菱",color:0x445566},
-    {name:"林子婷",color:0x556677},{name:"🔗遊戲連結",color:0x00f2ff}
+    {name:"鍾凱羽",color:0xccffcc},{name:"葉子菱",color:0x88ccff},
+    {name:"林子婷",color:0xffaacc},{name:"學員20",color:0xaaffaa},
+    {name:"學員21",color:0xffcc88},
+    {name:"🎮 遊戲連結",color:0x00f2ff},   // index 21 → 遊戲
+    {name:"🖼️ 虛擬藝廊",color:0xff88ff},   // index 22 → 藝廊
 ];
 const FOOD_COLORS=[0xff3333,0x33ff66,0xffff33,0xff33ff,0x33ffff,0xff8800,0xffffff,0x00aaff,0xff6699];
 
@@ -154,32 +157,101 @@ renderer.shadowMap.enabled = true;
 document.getElementById('game-container').appendChild(renderer.domElement);
 
 function buildScene(){
-    scene.background = new THREE.Color(0x02050f);
-    scene.fog = new THREE.FogExp2(0x02050f, 0.012);
-    // 星星
+    scene.background = new THREE.Color(0x87ceeb);
+    scene.fog = new THREE.Fog(0x87ceeb, 40, 120);
+
+    // 星星（夜晚效果備用）
     const sp=[], sg=new THREE.BufferGeometry();
-    for(let i=0;i<3000;i++) sp.push((Math.random()-.5)*400,Math.random()*80+5,(Math.random()-.5)*400);
+    for(let i=0;i<1500;i++) sp.push((Math.random()-.5)*400,Math.random()*80+15,(Math.random()-.5)*400);
     sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
-    scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:0.18,transparent:true,opacity:0.7})));
-    // 地板
-    const grid=new THREE.GridHelper(500,100,0x1a3a6a,0x0a1a3a); grid.position.y=0.01; scene.add(grid);
-    const floor=new THREE.Mesh(new THREE.PlaneGeometry(500,500),new THREE.MeshStandardMaterial({color:0x050e22,metalness:0.3,roughness:0.8}));
+    scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:0.2,transparent:true,opacity:0.5})));
+
+    // ── 繽紛地面 ─────────────────────────────────
+    // 主地板（草地綠）
+    const floorTex = new THREE.TextureLoader().load('forest/textures/Floor_baseColor.jpeg');
+    floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
+    floorTex.repeat.set(20, 20);
+    const floor=new THREE.Mesh(
+        new THREE.PlaneGeometry(500,500),
+        new THREE.MeshStandardMaterial({map:floorTex, roughness:0.9, metalness:0})
+    );
     floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
-    // 燈光
-    scene.add(new THREE.AmbientLight(0xffffff,2.5));
-    const sun=new THREE.DirectionalLight(0xffffff,3); sun.position.set(20,40,20); sun.castShadow=true; scene.add(sun);
-    const rl1=new THREE.PointLight(0x88ddff,4,120); rl1.position.set(0,20,0); scene.add(rl1);
-    const rl2=new THREE.PointLight(0xffccaa,2,80);  rl2.position.set(-30,10,30); scene.add(rl2);
-    const rl3=new THREE.PointLight(0xaaffcc,2,80);  rl3.position.set(30,10,-30); scene.add(rl3);
-    // 邊界柱
-    const pm=new THREE.MeshStandardMaterial({color:0x00f2ff,emissive:0x00f2ff,emissiveIntensity:0.8,transparent:true,opacity:0.4});
-    [[-1,1],[1,1],[1,-1],[-1,-1]].forEach(([sx,sz])=>{
-        const p=new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.15,6,8),pm);
-        p.position.set(sx*CONFIG.FIELD_SIZE,2,sz*CONFIG.FIELD_SIZE); scene.add(p);
-        const pl=new THREE.PointLight(0x00f2ff,1.5,12); pl.position.set(sx*CONFIG.FIELD_SIZE,6,sz*CONFIG.FIELD_SIZE); scene.add(pl);
+
+    // 彩色地面裝飾圓圈（繽紛感）
+    const patchColors=[0x88dd44,0x44cc88,0xddcc22,0xff8844,0x44aaff,0xee44aa,0x88ffcc];
+    for(let i=0;i<30;i++){
+        const c=patchColors[i%patchColors.length];
+        const r=2+Math.random()*4;
+        const patch=new THREE.Mesh(
+            new THREE.CircleGeometry(r,16),
+            new THREE.MeshStandardMaterial({color:c,transparent:true,opacity:0.25,roughness:1})
+        );
+        patch.rotation.x=-Math.PI/2;
+        patch.position.set((Math.random()-.5)*160,0.02,(Math.random()-.5)*160);
+        scene.add(patch);
+    }
+
+    // 格線（淡一點）
+    const grid=new THREE.GridHelper(500,80,0x44aa44,0x228822);
+    grid.material.transparent=true; grid.material.opacity=0.2;
+    grid.position.y=0.03; scene.add(grid);
+
+    // ── 燈光 ──────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff,2.0));
+    const sun=new THREE.DirectionalLight(0xfffacc,3.5);
+    sun.position.set(30,60,30); sun.castShadow=true;
+    sun.shadow.mapSize.width=2048; sun.shadow.mapSize.height=2048;
+    scene.add(sun);
+    // 天空藍補光
+    const skyLight=new THREE.HemisphereLight(0x87ceeb,0x44aa44,1.2);
+    scene.add(skyLight);
+
+    // ── 邊界柱（花朵色）──────────────────────────
+    const pillarColors=[0xff4488,0x44ffaa,0xffdd44,0x44aaff];
+    [[-1,1],[1,1],[1,-1],[-1,-1]].forEach(([sx,sz],i)=>{
+        const c=pillarColors[i];
+        const pm=new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:0.6,transparent:true,opacity:0.6});
+        const p=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.2,8,8),pm);
+        p.position.set(sx*CONFIG.FIELD_SIZE,3,sz*CONFIG.FIELD_SIZE); scene.add(p);
+        const pl=new THREE.PointLight(c,2,15); pl.position.set(sx*CONFIG.FIELD_SIZE,8,sz*CONFIG.FIELD_SIZE); scene.add(pl);
     });
-    // 天空
+
+    // ── 天空背景 ─────────────────────────────────
     if(CONFIG.SKY_IMG) new THREE.TextureLoader().load(CONFIG.SKY_IMG,t=>{t.mapping=THREE.EquirectangularReflectionMapping;scene.background=t;});
+
+    // ── 載入 3D 森林場景（裝飾邊緣）────────────────
+    loader.load('forest/scene.gltf', gltf=>{
+        const forest=gltf.scene;
+        // 放大並鋪在場地外圍
+        forest.scale.setScalar(0.08);
+        forest.position.set(0,-0.5,0);
+        forest.traverse(n=>{
+            if(n.isMesh){n.castShadow=true;n.receiveShadow=true;}
+        });
+        scene.add(forest);
+        console.log('[Scene] 森林地形載入成功');
+    }, undefined, err=>{
+        console.warn('[Scene] scene.gltf 未找到，使用純色地面');
+        // Fallback：簡單草叢裝飾
+        addSimpleVegetation();
+    });
+}
+
+function addSimpleVegetation(){
+    // 若 GLTF 未上傳，用簡單幾何形狀裝飾地面邊緣
+    const bushMat=new THREE.MeshStandardMaterial({color:0x228833});
+    const treeMat=new THREE.MeshStandardMaterial({color:0x336622});
+    for(let i=0;i<40;i++){
+        const angle=Math.random()*Math.PI*2;
+        const dist=CONFIG.FIELD_SIZE+3+Math.random()*15;
+        const x=Math.cos(angle)*dist, z=Math.sin(angle)*dist;
+        // 樹幹
+        const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.3,1.5,6),new THREE.MeshStandardMaterial({color:0x885533}));
+        trunk.position.set(x,0.75,z); scene.add(trunk);
+        // 樹冠
+        const crown=new THREE.Mesh(new THREE.SphereGeometry(1.2+Math.random(),6,5),treeMat.clone());
+        crown.position.set(x,2.5+Math.random(),z); scene.add(crown);
+    }
 }
 buildScene();
 
@@ -242,6 +314,9 @@ const CAM_DIST=16, CAM_H=7;
 // 子彈
 const bullets=[];
 let lastShootTime=0;
+
+// ★ 防誤扣：本地剛吃的食物還未同步到 Firestore 時，忽略 segCount 減少
+let pendingLocalGain=0; // 本地剛增加但還沒上傳確認的節段數
 
 // 其他玩家
 const others={};
@@ -446,6 +521,8 @@ async function preloadFoodGLBs(){
 // ════════════════════════════════════════
 function addTail(t=0){
     const m=makeFoodMesh(t); m.position.copy(myGroup.position); scene.add(m); myTail.push({mesh:m,t});
+    pendingLocalGain++; // ★ 標記本地增加，防止 Firestore 誤判
+    setTimeout(()=>{ pendingLocalGain=Math.max(0,pendingLocalGain-1); },3000); // 3秒後解除保護
 }
 function removeTail(){
     if(!myTail.length) return;
@@ -597,18 +674,20 @@ async function initFirebase(){
                 snap.forEach(async dSnap=>{
                     const d=dSnap.data(), uid=dSnap.id;
                     if(uid===userId){
-                        // 被偷同步
-                        if(typeof d.segCount==='number'&&d.segCount<myTail.length){
-                            const lost=myTail.length-d.segCount;
-                            for(let i=0;i<lost;i++) removeTail();
-                            showFlash(`💀 被打中！ -${lost}`);
-                            updateScore();
-                            screenShake(0.5); // ★ 被打到震動更強
-                            // ★ 紅色閃屏
-                            const flash=document.createElement('div');
-                            flash.style.cssText='position:fixed;inset:0;background:rgba(255,0,0,0.35);z-index:999;pointer-events:none;transition:opacity 0.4s';
-                            document.body.appendChild(flash);
-                            setTimeout(()=>{flash.style.opacity=0;setTimeout(()=>flash.remove(),400);},50);
+                        // ★ 修 Bug：扣分時扣除本地剛吃但未同步的數量，避免誤扣
+                        if(typeof d.segCount==='number'){
+                            const expected = myTail.length - pendingLocalGain;
+                            if(d.segCount < expected){
+                                const lost = expected - d.segCount;
+                                for(let i=0;i<lost;i++) removeTail();
+                                showFlash(`💀 被打中！ -${lost}`);
+                                updateScore();
+                                screenShake(0.5);
+                                const flash=document.createElement('div');
+                                flash.style.cssText='position:fixed;inset:0;background:rgba(255,0,0,0.35);z-index:999;pointer-events:none;transition:opacity 0.4s';
+                                document.body.appendChild(flash);
+                                setTimeout(()=>{flash.style.opacity=0;setTimeout(()=>flash.remove(),400);},50);
+                            }
                         }
                         return;
                     }
@@ -900,11 +979,17 @@ function initUI(){
         c.className='character-card'; c.id=`card-${i}`;
         const hex=new THREE.Color(s.color).getHexString();
         c.innerHTML=`<div class="character-icon" style="background-color:#${hex};background-image:url('icon_${i}.jpg')"></div><div class="character-name">${s.name}</div>`;
-        if(i===19){
-            // 第20個卡片點擊開啟遊戲連結
+
+        if(i===21){
+            // 遊戲連結
             c.onclick=()=>window.open('https://gp01002.github.io/GAME/','_blank');
-            c.style.borderColor='#00f2ff';
-            c.style.background='rgba(0,242,255,0.1)';
+            c.style.cssText+='border-color:#00f2ff;background:rgba(0,242,255,0.15);';
+            c.title='開啟遊戲';
+        } else if(i===22){
+            // 虛擬藝廊連結（先預留，之後填入真實網址）
+            c.onclick=()=>window.open('https://gp01002.github.io/GAME/','_blank'); // ← 之後改成藝廊網址
+            c.style.cssText+='border-color:#ff88ff;background:rgba(255,136,255,0.15);';
+            c.title='開啟虛擬藝廊';
         } else {
             c.onclick=()=>switchChar(i);
         }
