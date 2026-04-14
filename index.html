@@ -256,6 +256,7 @@ function buildScene(){
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI/2;
     floor.position.y = -0.01;
+    floor.name = 'gameFloor'; // ★ 標記，切換藝廊時隱藏
     scene.add(floor);
     // 嘗試載入貼圖（失敗就維持綠色）
     new THREE.TextureLoader().load('forest/textures/Floor_baseColor.jpeg', tex=>{
@@ -398,6 +399,7 @@ setTimeout(()=>startWeather(['rain','snow','petals','clear'][Math.floor(Math.ran
 //  玩家狀態
 // ════════════════════════════════════════
 let userId=null, myIdx=0, db=null;
+let unsubFood=null, unsubPlayers=null; // Firestore 訂閱取消函式
 const myGroup=new THREE.Group(); scene.add(myGroup);
 let myMixer=null, myActions={};
 let myTail=[], myPath=[];
@@ -850,7 +852,7 @@ async function initFirebase(){
             });
 
             // ── 監聽食物（只讀）────────────────────────────
-            onSnapshot(foodCol, snap=>{
+            unsubFood = onSnapshot(foodCol, snap=>{
                 const live=new Set(snap.docs.map(d=>d.id));
                 Object.keys(foodMeshes).forEach(id=>{if(!live.has(id)) delFoodMesh(id);});
                 snap.forEach(d=>addFoodMesh(d.id,d.data().x,d.data().z,d.data().t));
@@ -860,7 +862,7 @@ async function initFirebase(){
             });
 
             // ── 監聽玩家（只讀）────────────────────────────
-            onSnapshot(playersCol, snap=>{
+            unsubPlayers = onSnapshot(playersCol, snap=>{
                 const liveIds=new Set(snap.docs.map(d=>d.id));
                 snap.forEach(async dSnap=>{
                     const d=dSnap.data(), uid=dSnap.id;
@@ -1094,9 +1096,23 @@ function buildGallery(){
         const cardMat = new THREE.MeshBasicMaterial({color:new THREE.Color(art.color)});
         const card    = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 3.1), cardMat);
         card.position.z = 0.08;
-        texLoader.load(`gallery_${i}.jpg`, tex=>{
-            cardMat.map=tex; cardMat.color.set(0xffffff); cardMat.needsUpdate=true;
-        });
+        // 用 fetch 確認檔案存在後再載入（解決 404 靜默失敗問題）
+        (async ()=>{
+            const candidates=[`gallery_${i}.png`,`gallery_${i}.jpg`,`gallery_ ${i}.png`,`gallery_ ${i}.jpg`];
+            for(const url of candidates){
+                try{
+                    const res=await fetch(url,{method:'HEAD'});
+                    if(res.ok){
+                        texLoader.load(url,tex=>{
+                            cardMat.map=tex;
+                            cardMat.color.set(0xffffff);
+                            cardMat.needsUpdate=true;
+                        });
+                        break;
+                    }
+                }catch(e){}
+            }
+        })();
 
         // ── 姓名標籤 ─────────────────────
         const nc = document.createElement('canvas');
@@ -1172,30 +1188,151 @@ function buildGallery(){
 }
 
 // 切換模式
+// 藝廊專用地面（大理石反光）
+let galleryFloor = null;
+let galleryBenches = [];
+let galleryEntered = false;
+
+function buildGalleryScene(){
+    if(galleryEntered) return;
+    galleryEntered = true;
+
+    // ── 大理石反光地面（替換草地）──────────────
+    galleryFloor = new THREE.Mesh(
+        new THREE.PlaneGeometry(200,200,1,1), // ★ 縮小減少頂點
+        new THREE.MeshStandardMaterial({
+            color: 0xe8e8f0,
+            metalness: 0.55,
+            roughness: 0.1,
+        })
+    );
+    galleryFloor.rotation.x = -Math.PI/2;
+    galleryFloor.position.y = 0.02;
+    // 大理石網格線
+    const grid2 = new THREE.GridHelper(300, 30, 0xbbbbcc, 0xccccdd);
+    grid2.position.y = 0.03;
+    grid2.material.transparent = true;
+    grid2.material.opacity = 0.3;
+    galleryFloor.userData.grid = grid2;
+    scene.add(galleryFloor);
+    scene.add(grid2);
+    galleryObjects.push(galleryFloor, grid2);
+
+    // ── 長條幾何椅子 ─────────────────────────
+    const benchMat = new THREE.MeshStandardMaterial({color:0x444466, metalness:0.5, roughness:0.3});
+    const legMat   = new THREE.MeshStandardMaterial({color:0x888899, metalness:0.7, roughness:0.2});
+    const benchPositions = [
+        {x:0,  z:8},  {x:0,  z:-8},
+        {x:8,  z:0},  {x:-8, z:0},
+        {x:14, z:14}, {x:-14,z:14},
+        {x:14, z:-14},{x:-14,z:-14},
+    ];
+    benchPositions.forEach(({x,z},bi)=>{
+        const angle = Math.atan2(x,z);
+        const g = new THREE.Group();
+        // 座面
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(2.8,0.2,0.7), benchMat);
+        seat.position.y = 0.5; g.add(seat);
+        // 靠背
+        const back = new THREE.Mesh(new THREE.BoxGeometry(2.8,0.6,0.12), benchMat);
+        back.position.set(0,0.95,0.3); g.add(back);
+        // 腳 x4
+        [[-1.1,0.14,-0.25],[1.1,0.14,-0.25],[-1.1,0.14,0.25],[1.1,0.14,0.25]].forEach(([lx,ly,lz])=>{
+            const leg=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.4,0.1),legMat);
+            leg.position.set(lx,ly,lz); g.add(leg);
+        });
+        g.position.set(x, 0, z);
+        g.rotation.y = angle + Math.PI/2;
+        g.visible = false;
+        scene.add(g);
+        galleryObjects.push(g);
+        galleryBenches.push(g);
+    });
+}
+
 function toggleMode(){
     galleryMode = !galleryMode;
-    buildGallery(); // 確保已建立
+    buildGallery();
+    buildGalleryScene();
 
     // 顯示/隱藏藝廊物件
     galleryObjects.forEach(o=>o.visible=galleryMode);
 
-    // 切換 UI
-    const gameUIs = ['#score-ui','#timer-ui','#host-badge','#shoot-btn'];
-    gameUIs.forEach(sel=>{
+    // 遊戲 UI 顯示/隱藏
+    ['#score-ui','#timer-ui','#host-badge','#shoot-btn','#overlay'].forEach(sel=>{
         const el=document.querySelector(sel);
-        if(el) el.style.display=galleryMode?'none':'';
+        if(el) el.style.display = galleryMode ? 'none' : '';
     });
     document.getElementById('brush-toolbar').classList.toggle('visible', galleryMode);
     document.getElementById('draw-mobile').classList.toggle('visible', galleryMode);
     document.getElementById('mode-btn').textContent = galleryMode ? '🎮 遊戲模式' : '🖼️ 藝廊模式';
     document.getElementById('mode-btn').classList.toggle('gallery', galleryMode);
 
-    // 藝廊模式：把相機移到中間俯看
+    // 找遊戲地板（名稱標記）
+    const gameFloorMesh = scene.getObjectByName('gameFloor');
+
     if(galleryMode){
-        myGroup.position.set(0,0,0);
-        showFlash('🖼️ 歡迎來到藝廊！');
+        if(gameFloorMesh) gameFloorMesh.visible = false; // ★ 隱藏草地
+        // 隱藏遊戲食物 mesh（不刪除，只隱藏）
+        Object.values(foodMeshes).forEach(m=>{ if(m) m.visible=false; });
+        // 隱藏遊戲格線
+        scene.traverse(o=>{ if(o.isGridHelper) o.visible=false; });
+        // 換天空
+        new THREE.TextureLoader().load('sky2.jpg', t=>{
+            t.mapping=THREE.EquirectangularReflectionMapping;
+            scene.background=t;
+        }, undefined, ()=>{
+            scene.background=new THREE.Color(0x1a1a2e);
+        });
+        scene.fog = new THREE.Fog(0x2a2a3e, 45, 130);
+        myGroup.position.set(0,0,8);
+        showFlash('🖼️ 歡迎來到虛擬藝廊！');
+        // ★ 藝廊模式斷開即時同步，釋放效能
+        if(typeof unsubFood === 'function'){ unsubFood(); unsubFood=null; }
+        if(typeof unsubPlayers === 'function'){ unsubPlayers(); unsubPlayers=null; }
+        // 清除其他玩家顯示
+        Object.keys(others).forEach(uid=>removeOther(uid));
+        setStatus('🖼️ 藝廊模式','（已暫停連線）');
     } else {
+        if(gameFloorMesh) gameFloorMesh.visible = true; // ★ 還原草地
+        // 還原食物 mesh 可見
+        Object.values(foodMeshes).forEach(m=>{ if(m) m.visible=true; });
+        // 還原格線
+        scene.traverse(o=>{ if(o.isGridHelper) o.visible=true; });
+        new THREE.TextureLoader().load('sky.jpg', t=>{
+            t.mapping=THREE.EquirectangularReflectionMapping;
+            scene.background=t;
+        });
+        scene.fog = new THREE.Fog(0x87ceeb, 55, 140);
         showFlash('🎮 回到遊戲！');
+        // ★ 重新連接 Firestore
+        if(db && !unsubFood){
+            const foodCol2=collection(db,'artifacts',APP,'public','data','food');
+            const playersCol2=collection(db,'artifacts',APP,'public','data','players');
+            unsubFood=onSnapshot(foodCol2,snap=>{
+                const live=new Set(snap.docs.map(d=>d.id));
+                Object.keys(foodMeshes).forEach(id=>{if(!live.has(id)) delFoodMesh(id);});
+                snap.forEach(d=>addFoodMesh(d.id,d.data().x,d.data().z,d.data().t));
+                setStatus('✅ 已連線',`WASD / 搖桿 移動　🍎 ${snap.size}`);
+            });
+            unsubPlayers=onSnapshot(playersCol2,snap=>{
+                const liveIds=new Set(snap.docs.map(d=>d.id));
+                snap.forEach(async dSnap=>{
+                    const data=dSnap.data(), uid=dSnap.id;
+                    if(uid===userId){
+                        if(typeof data.segCount==='number'&&data.segCount<myTail.length){
+                            const lost=myTail.length-data.segCount;
+                            for(let i=0;i<lost;i++) removeTail();
+                            showFlash(`💀 被打中！ -${lost}`); updateScore(); screenShake(0.5);
+                        }
+                        return;
+                    }
+                    handleOther(uid,data);
+                });
+                Object.keys(others).forEach(uid=>{if(!liveIds.has(uid)) removeOther(uid);});
+                updateCardUI(snap.docs.map(d=>d.data().idx));
+            });
+        }
     }
 }
 
@@ -1251,6 +1388,30 @@ function animate(){
     foodBob+=dt*2;
     updateTimer();
     tickWeather(dt);
+    // 藝廊模式：遊戲完全停止，只跑藝廊邏輯
+    if(galleryMode){
+        // 只更新可見的 mixer（減少效能負擔）
+        galleryObjects.forEach(o=>{ if(o.visible&&o.userData?.mixer) o.userData.mixer.update(dt); });
+        let gs=0;
+        if(keys['w']||keys['arrowup'])    gs= 0.14;
+        if(keys['s']||keys['arrowdown'])  gs=-0.14;
+        if(keys['a']||keys['arrowleft'])  camAngle+=0.05;
+        if(keys['d']||keys['arrowright']) camAngle-=0.05;
+        if(gs!==0){myGroup.position.x+=Math.sin(camAngle)*gs;myGroup.position.z+=Math.cos(camAngle)*gs;}
+        if(joyActive){const d=Math.hypot(joyX,joyY);if(d>0.1){const wa=Math.atan2(joyX,joyY)+camAngle;myGroup.position.x+=Math.sin(wa)*0.14*d;myGroup.position.z+=Math.cos(wa)*0.14*d;}}
+        myGroup.position.x=Math.max(-50,Math.min(50,myGroup.position.x));
+        myGroup.position.z=Math.max(-50,Math.min(50,myGroup.position.z));
+        if(isDrawing&&mouseHeld) drawDot();
+        vrRig.position.set(0,0,0);
+        const gx=myGroup.position.x+Math.sin(camAngle)*14*Math.cos(camPitch);
+        const gy=Math.sin(camPitch)*14+3;
+        const gz=myGroup.position.z+Math.cos(camAngle)*14*Math.cos(camPitch);
+        camera.position.lerp(new THREE.Vector3(gx,gy,gz),0.1);
+        camera.lookAt(myGroup.position.x,1.5,myGroup.position.z);
+        renderer.render(scene,camera);
+        return;
+    }
+
     if(roundOver){renderer.render(scene,camera);return;}
 
     // 移動（鍵盤 + VR）
@@ -1449,15 +1610,15 @@ function initUI(){
         c.innerHTML=`<div class="character-icon" style="background-color:#${hex};background-image:url('icon_${i}.jpg')"></div><div class="character-name">${s.name}</div>`;
 
         if(i===21){
-            // 遊戲連結
+            // 🖼️ 虛擬藝廊（切換模式）
+            c.onclick=()=>toggleMode();
+            c.style.cssText+='border-color:#ff88ff;background:rgba(255,136,255,0.15);';
+            c.title='虛擬藝廊';
+        } else if(i===22){
+            // 🎮 遊戲連結
             c.onclick=()=>window.open('https://gp01002.github.io/GAME/','_blank');
             c.style.cssText+='border-color:#00f2ff;background:rgba(0,242,255,0.15);';
-            c.title='開啟遊戲';
-        } else if(i===22){
-            // 虛擬藝廊：直接切換到藝廊模式！
-            c.onclick=()=>{ if(!galleryMode) toggleMode(); };
-            c.style.cssText+='border-color:#ff88ff;background:rgba(255,136,255,0.15);';
-            c.title='開啟虛擬藝廊';
+            c.title='開啟遊戲連結';
         } else {
             c.onclick=()=>switchChar(i);
         }
