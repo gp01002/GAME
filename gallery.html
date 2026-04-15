@@ -164,40 +164,33 @@ STUDENTS.forEach(function(art,i){
     pg.position.set(px,3.2,pz); pg.lookAt(0,3.2,0); scene.add(pg);
 
     // 角色站在海報正前方，面向外側（朝觀眾）
-    var charDist = RADIUS - 3.0;
-    var cx = Math.cos(angle)*charDist;
-    var cz = Math.sin(angle)*charDist;
+    var charDist = RADIUS - 2.5;
+    var cx = Math.cos(angle) * charDist;
+    var cz = Math.sin(angle) * charDist;
     var cg = new THREE.Group();
     cg.position.set(cx, 0, cz);
-    // 讓角色正面朝外（觀眾進來看到正面）
-    // cg 朝向 = 從角色位置指向原點的反方向
-    // rotation.y = angle → 容器朝向圓心外側（正面朝外）
-    cg.rotation.y = angle;
+    cg.lookAt(new THREE.Vector3(0, 0, 0)); // 面向圓心
+    cg.rotateY(Math.PI);                  // 再轉 180° → 正面朝觀眾
     scene.add(cg);
 
-    loader.load('student_'+i+'.glb',function(gltf){
+    loader.load('student_'+i+'.glb', function(gltf){
         var m = gltf.scene;
-        // 先用 scale=1 量 BoundingBox，統一縮放到 1.8m 身高
         m.scale.setScalar(1);
         var box = new THREE.Box3().setFromObject(m);
-        var natH = box.max.y - box.min.y;
-        var targetH = 2.0; // 以 student_13 為基準
-        var s = natH > 0.01 ? targetH / natH : 1;
+        var h = box.max.y - box.min.y;
+        var s = (h > 0.01) ? 1.9 / h : 1.0; // 1.9m 身高（student_13 比例）
         m.scale.setScalar(s);
-        // 旋轉：先 model 轉 -90° 修正 GLB 朝向，再整體反轉 180° 讓正面朝外
-        m.rotation.y = Math.PI * 0.5;   // -90°+180° = +90°  最終朝外
-        // 重算縮放後的 BBox，讓腳貼地
+        m.rotation.y = -Math.PI * 0.5;        // GLB 預設朝向修正
         m.updateMatrixWorld(true);
         var box2 = new THREE.Box3().setFromObject(m);
-        m.position.y = -box2.min.y;
+        m.position.y = -box2.min.y;            // 腳踩地
         cg.add(m);
-    },undefined,function(){
-        var b=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.3,1.2,8),new THREE.MeshLambertMaterial({color:art.color}));
-        b.position.y=0.6; cg.add(b);
-        var h2=new THREE.Mesh(new THREE.SphereGeometry(0.32,8,8),new THREE.MeshLambertMaterial({color:art.color}));
-        h2.position.y=1.6; cg.add(h2);
+    }, undefined, function(){
+        var body = new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.28,1.1,8),new THREE.MeshLambertMaterial({color:art.color}));
+        body.position.y=0.7; cg.add(body);
+        var head = new THREE.Mesh(new THREE.SphereGeometry(0.3,8,8),new THREE.MeshLambertMaterial({color:art.color}));
+        head.position.y=1.6; cg.add(head);
     });
-
     // 地面光圈
     var rc=new THREE.EllipseCurve(0,0,1.1,1.1,0,Math.PI*2);
     var ring=new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(rc.getPoints(14))),

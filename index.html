@@ -999,18 +999,24 @@ function animate(){
 
     // 攝影機
     if(renderer.xr.isPresenting){
-        // VR：vrRig 跟隨角色，Y=0（頭顯自帶 1.6m 高度）
-        vrRig.position.set(myGroup.position.x,0,myGroup.position.z);
-        vrRig.rotation.y=myGroup.rotation.y;
+        // VR 模式：vrRig 跟隨角色位置，自己的模型隱藏避免遮擋
+        vrRig.position.set(myGroup.position.x, 0, myGroup.position.z);
+        vrRig.rotation.y = myGroup.rotation.y;
+        myGroup.visible = false; // 隱藏自己避免 VR 視角穿模
     } else {
+        myGroup.visible = true;
         vrRig.position.set(0,0,0); vrRig.rotation.y=0;
-        const cx=myGroup.position.x+Math.sin(camAngle)*CAM_DIST*Math.cos(camPitch);
-        const cy=myGroup.position.y+Math.sin(camPitch)*CAM_DIST+CAM_H*0.3;
-        const cz=myGroup.position.z+Math.cos(camAngle)*CAM_DIST*Math.cos(camPitch);
-        camera.position.lerp(new THREE.Vector3(cx,cy,cz),0.1);
-        camera.lookAt(myGroup.position.x,1.5,myGroup.position.z);
+        // 第三人稱攝影機（不手動設 camera，讓 lerp 接管）
+        camera.position.lerp(
+            new THREE.Vector3(
+                myGroup.position.x + Math.sin(camAngle)*CAM_DIST*Math.cos(camPitch),
+                myGroup.position.y + Math.sin(camPitch)*CAM_DIST + CAM_H*0.3,
+                myGroup.position.z + Math.cos(camAngle)*CAM_DIST*Math.cos(camPitch)
+            ), 0.1
+        );
+        camera.lookAt(myGroup.position.x, 1.5, myGroup.position.z);
     }
-    renderer.render(scene,camera);
+    renderer.render(scene, camera);
 }
 
 // ════════════════════════════════════════
