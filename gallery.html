@@ -164,32 +164,43 @@ STUDENTS.forEach(function(art,i){
     pg.position.set(px,3.2,pz); pg.lookAt(0,3.2,0); scene.add(pg);
 
     // 角色站在海報正前方，面向外側（朝觀眾）
-    var charDist = RADIUS - 2.5;
+    // 角色站海報正前方：緩慢自轉展示，統一等高 ─────────
+    var charDist = RADIUS - 2.6;
     var cx = Math.cos(angle) * charDist;
     var cz = Math.sin(angle) * charDist;
     var cg = new THREE.Group();
     cg.position.set(cx, 0, cz);
-    cg.lookAt(new THREE.Vector3(0, 0, 0)); // 面向圓心
-    cg.rotateY(Math.PI);                  // 再轉 180° → 正面朝觀眾
     scene.add(cg);
+    charGroups.push(cg); // 記錄所有角色 group，動畫裡旋轉
 
     loader.load('student_'+i+'.glb', function(gltf){
         var m = gltf.scene;
         m.scale.setScalar(1);
-        var box = new THREE.Box3().setFromObject(m);
-        var h = box.max.y - box.min.y;
-        var s = (h > 0.01) ? 1.9 / h : 1.0; // 1.9m 身高（student_13 比例）
-        m.scale.setScalar(s);
-        m.rotation.y = -Math.PI * 0.5;        // GLB 預設朝向修正
+
+        // 兩步驟統一高度：
+        // 1. 先算出原始 BBox 高度
+        m.updateMatrixWorld(true);
+        var box1 = new THREE.Box3().setFromObject(m);
+        var rawH = box1.max.y - box1.min.y;
+
+        // 2. 縮放到目標高度 1.9m（不管原始多大）
+        var TARGET = 1.9;
+        if(rawH > 0.01) m.scale.setScalar(TARGET / rawH);
+
+        // 3. 重算縮放後 BBox，讓腳踩地
         m.updateMatrixWorld(true);
         var box2 = new THREE.Box3().setFromObject(m);
-        m.position.y = -box2.min.y;            // 腳踩地
+        m.position.y = -box2.min.y;
+
+        // 初始朝向：讓正面面外（角度 = angle，對應圓外方向）
+        cg.rotation.y = angle + Math.PI;
         cg.add(m);
     }, undefined, function(){
         var body = new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.28,1.1,8),new THREE.MeshLambertMaterial({color:art.color}));
-        body.position.y=0.7; cg.add(body);
+        body.position.y = 0.7; cg.add(body);
         var head = new THREE.Mesh(new THREE.SphereGeometry(0.3,8,8),new THREE.MeshLambertMaterial({color:art.color}));
-        head.position.y=1.6; cg.add(head);
+        head.position.y = 1.65; cg.add(head);
+        cg.rotation.y = angle + Math.PI;
     });
     // 地面光圈
     var rc=new THREE.EllipseCurve(0,0,1.1,1.1,0,Math.PI*2);
@@ -201,6 +212,7 @@ STUDENTS.forEach(function(art,i){
 });
 
 // 移動
+var charGroups=[]; // 所有角色 group（用於自轉）
 var fpPos=new THREE.Vector3(0,1.6,8);
 var fpYaw=0;
 var fpDrag=false, fpDragX=0;
@@ -212,8 +224,17 @@ var isDrawing=false, mouseHeld=false;
 var brushColor=new THREE.Color('#ff4444'), brushSize=0.13;
 
 function drawDot(){
-    var dir=new THREE.Vector3(Math.sin(fpYaw),0,-Math.cos(fpYaw));
-    var pos=fpPos.clone().addScaledVector(dir,3.5);
+    var dir, pos;
+    if(renderer.xr.isPresenting){
+        // VR 模式：從 camera 世界位置往前 2m 畫
+        var worldPos = new THREE.Vector3();
+        camera.getWorldPosition(worldPos);
+        var worldDir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+        pos = worldPos.clone().addScaledVector(worldDir, 2.0);
+    } else {
+        dir = new THREE.Vector3(Math.sin(fpYaw),0,-Math.cos(fpYaw));
+        pos = fpPos.clone().addScaledVector(dir, 3.5);
+    }
     var pt=new THREE.Mesh(new THREE.SphereGeometry(brushSize,6,6),new THREE.MeshBasicMaterial({color:brushColor.clone()}));
     pt.position.copy(pos); scene.add(pt); drawings.push(pt);
     if(drawings.length>2000) scene.remove(drawings.shift());
@@ -319,6 +340,9 @@ function getVRInput(){
 }
 
 function animate(){
+    // 角色緩慢自轉（每秒約 30°）
+    var rotDelta = 0.006;
+    for(var cg2 of charGroups){ cg2.rotation.y += rotDelta; }
     var fwdX=Math.sin(fpYaw), fwdZ=Math.cos(fpYaw);
 
     var vrIn=getVRInput();

@@ -198,13 +198,13 @@ function buildScene(){
     // 草地地板（純綠，無格線）
     const floor=new THREE.Mesh(new THREE.PlaneGeometry(500,500),
         new THREE.MeshStandardMaterial({color:0x3a7d20,roughness:0.95,metalness:0.0}));
-    floor.rotation.x=-Math.PI/2; // floor.receiveShadow=false; scene.add(floor);
+    floor.rotation.x=-Math.PI/2; scene.add(floor); // 草地地板
     // 細微草地紋理用第二層半透明格線（非常淡）
     const grid=new THREE.GridHelper(500,80,0x2a6010,0x2a6010);
     grid.material.transparent=true; grid.material.opacity=0.08; grid.position.y=0.02; scene.add(grid);
     // 燈光
     scene.add(new THREE.AmbientLight(0xffffff,2.5));
-    const sun=new THREE.DirectionalLight(0xffffff,3); sun.position.set(20,40,20); // sun.castShadow=false; scene.add(sun);
+    const sun=new THREE.DirectionalLight(0xffffff,3); sun.position.set(20,40,20); scene.add(sun);
     const rl1=new THREE.PointLight(0x88ddff,4,120); rl1.position.set(0,20,0); scene.add(rl1);
     const rl2=new THREE.PointLight(0xffccaa,2,80);  rl2.position.set(-30,10,30); scene.add(rl2);
     const rl3=new THREE.PointLight(0xaaffcc,2,80);  rl3.position.set(30,10,-30); scene.add(rl3);
@@ -892,7 +892,7 @@ function animate(){
 
     // ── VR 移動（左手搖桿前後平移，右手搖桿轉向）──────
     var vrIn=getVRInput();
-    // 右手扳機（button[0]）→ 發射
+    // 右手扳機 → 發射
     var vrSession=renderer.xr.getSession();
     if(vrSession){for(var src of vrSession.inputSources){if(src.handedness==='right'&&src.gamepad&&src.gamepad.buttons[0]&&src.gamepad.buttons[0].pressed){shoot();break;}}}
     if(vrIn){
@@ -900,8 +900,9 @@ function animate(){
         var vd=Math.hypot(vrIn.moveX,vrIn.moveZ);
         if(vd>0.15){
             var vy=myGroup.rotation.y;
-            myGroup.position.x-=Math.sin(vy)*vrIn.moveZ*CONFIG.MOVE_SPEED*1.5;
-            myGroup.position.z-=Math.cos(vy)*vrIn.moveZ*CONFIG.MOVE_SPEED*1.5;
+            // moveZ 負值=前進（修正前後顛倒）
+            myGroup.position.x+=Math.sin(vy)*vrIn.moveZ*CONFIG.MOVE_SPEED*1.5;
+            myGroup.position.z+=Math.cos(vy)*vrIn.moveZ*CONFIG.MOVE_SPEED*1.5;
             myGroup.position.x+=Math.cos(vy)*vrIn.moveX*CONFIG.MOVE_SPEED*1.5;
             myGroup.position.z-=Math.sin(vy)*vrIn.moveX*CONFIG.MOVE_SPEED*1.5;
         }
@@ -923,7 +924,7 @@ function animate(){
     if(joyActive){
         const d=Math.hypot(joyX,joyY);
         if(d>0.1){
-            const wa=Math.atan2(joyX,-joyY)+camAngle+Math.PI;
+            const wa=Math.atan2(-joyX,-joyY)+camAngle+Math.PI;
             myGroup.rotation.y=wa;
             const js=CONFIG.MOVE_SPEED*d;
             myGroup.position.x+=Math.sin(wa)*js;
