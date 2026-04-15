@@ -143,6 +143,8 @@ function tryLoadTex(base,mat){
 
 // 海報 + 角色
 const loader=new GLTFLoader();
+var charGroups=[]; // 所有角色 group（緩慢自轉用）
+
 STUDENTS.forEach(function(art,i){
     var angle=(i/STUDENTS.length)*Math.PI*2;
     var px=Math.cos(angle)*RADIUS, pz=Math.sin(angle)*RADIUS;
@@ -212,7 +214,6 @@ STUDENTS.forEach(function(art,i){
 });
 
 // 移動
-var charGroups=[]; // 所有角色 group（用於自轉）
 var fpPos=new THREE.Vector3(0,1.6,8);
 var fpYaw=0;
 var fpDrag=false, fpDragX=0;
