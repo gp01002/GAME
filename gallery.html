@@ -259,15 +259,22 @@ document.getElementById('clear-mob').addEventListener('touchstart',function(e){e
 
 var cvs=renderer.domElement;
 cvs.addEventListener('mousedown',function(e){
+    if(e.button!==0) return;
     mouseHeld=true;
-    if(isDrawing){ drawDot(); }  // 點擊立即畫
-    else { fpDrag=true; fpDragX=e.clientX; }
+    fpDrag=false;
+    if(isDrawing){
+        drawDot(); // 點擊立即畫一點
+    } else {
+        fpDrag=true; fpDragX=e.clientX; fpDragY=e.clientY||0;
+    }
 });
 cvs.addEventListener('mousemove',function(e){
-    if(isDrawing && mouseHeld){
-        drawDot();  // 拖曳連續畫（直接在事件裡呼叫，無延遲）
+    if(!mouseHeld) return;
+    if(isDrawing){
+        drawDot(); // 按住拖曳連續畫（無延遲）
     } else if(fpDrag){
-        fpYaw-=(e.clientX-fpDragX)*0.005; fpDragX=e.clientX;
+        fpYaw-=(e.clientX-fpDragX)*0.004;
+        fpDragX=e.clientX;
     }
 });
 cvs.addEventListener('mouseup',function(){mouseHeld=false;fpDrag=false;});
@@ -282,12 +289,19 @@ document.addEventListener('touchstart',function(e){
         if(t.clientY>=br.top) return;
         var jr=jZone.getBoundingClientRect();
         var inJ=t.clientX>=jr.left&&t.clientX<=jr.right&&t.clientY>=jr.top&&t.clientY<=jr.bottom;
-        if(inJ){if(touchIds.joy===-1){touchIds.joy=t.identifier;joyActive=true;}}
-        else{if(touchIds.cam===-1){
-            touchIds.cam=t.identifier; mouseHeld=true;
-            if(!isDrawing){fpDrag=true;fpDragX=t.clientX;}
-            else{drawDot();}  // 觸控點下立即畫
-        }}
+        if(inJ){
+            if(touchIds.joy===-1){touchIds.joy=t.identifier;joyActive=true;}
+        } else {
+            if(touchIds.cam===-1){
+                touchIds.cam=t.identifier;
+                mouseHeld=true;
+                if(isDrawing){
+                    drawDot(); // 點下立即畫
+                } else {
+                    fpDrag=true; fpDragX=t.clientX;
+                }
+            }
+        }
     });
 },{passive:true});
 document.addEventListener('touchmove',function(e){
@@ -299,8 +313,12 @@ document.addEventListener('touchmove',function(e){
             jKnob.style.transform='translate('+joyX*32+'px,'+joyY*32+'px)';
         }
         if(t.identifier===touchIds.cam){
-            if(isDrawing&&mouseHeld){ drawDot(); }
-            else if(fpDrag){ fpYaw-=(t.clientX-fpDragX)*0.006; fpDragX=t.clientX; }
+            if(isDrawing && mouseHeld){
+                drawDot(); // 拖曳連續畫
+            } else if(fpDrag && !isDrawing){
+                fpYaw-=(t.clientX-fpDragX)*0.006;
+                fpDragX=t.clientX;
+            }
         }
     });
 },{passive:true});
@@ -359,7 +377,7 @@ function animate(){
             fpPos.z-=Math.sin(fpYaw)*vrIn.moveX*SPEED*1.5;
         }
         // 右手扳機：畫點
-        if(vrIn.trigR) drawDot();
+        if(vrIn.trigR){var savedSize=brushSize;brushSize=Math.min(brushSize,0.06);drawDot();brushSize=savedSize;}
         // 左手扳機：清除
         if(vrIn.trigL) clearAll();
     } else if(!renderer.xr.isPresenting){
