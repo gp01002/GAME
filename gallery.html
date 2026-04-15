@@ -40,7 +40,7 @@
     <div class="bc" style="background:#cc44ff" data-c="#cc44ff"></div>
     <div class="bc" style="background:#ffffff" data-c="#ffffff"></div>
     <div class="bc" style="background:#ff88cc" data-c="#ff88cc"></div>
-    <input id="sz" type="range" min="0.04" max="0.45" step="0.04" value="0.13">
+    <input id="sz" type="range" min="0.02" max="0.25" step="0.01" value="0.04"><input id="op" type="range" min="0.1" max="1.0" step="0.1" value="1.0" style="width:40px;accent-color:#aaa;" title="透明度">
     <button class="bb" id="draw-btn">✏️ 畫</button>
     <button class="bb" id="clear-btn">🗑️</button>
 </div>
@@ -220,27 +220,129 @@ var fpDrag=false, fpDragX=0;
 var keys={};
 var joyActive=false, joyX=0, joyY=0;
 var touchIds={joy:-1,cam:-1};
-var drawings=[];
+var drawings=[]; // 舊引用，現用 allStrokes
+// ═══════════════════════════════════════════════════════
+//  3D 筆觸繪畫系統（TubeGeometry 連續線條，支援 VR）
+// ═══════════════════════════════════════════════════════
 var isDrawing=false, mouseHeld=false;
-var brushColor=new THREE.Color('#ff4444'), brushSize=0.13;
+var brushColor=new THREE.Color('#ff4444');
+var brushSize=0.04;          // 筆觸粗細（預設細一點）
+var strokeOpacity=1.0;       // 筆觸透明度
 
-function drawDot(){
-    var dir, pos;
+var allStrokes=[];           // 所有筆觸 mesh
+var currentPoints=[];        // 當前筆觸的點序列
+var currentStrokeMesh=null;  // 當前正在畫的 mesh
+var lastDrawPos=null;        // 上次畫點位置（避免重複）
+var MIN_DIST=0.05;           // 兩點最小距離（太近不畫）
+
+// ── 取得當前畫筆世界座標 ─────────────────────────────
+function getBrushPos(){
     if(renderer.xr.isPresenting){
-        // VR 模式：從 camera 世界位置往前 2m 畫
-        var worldPos = new THREE.Vector3();
-        camera.getWorldPosition(worldPos);
-        var worldDir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-        pos = worldPos.clone().addScaledVector(worldDir, 2.0);
+        // VR：從右手控制器位置
+        var vrSess=renderer.xr.getSession();
+        if(vrSess){
+            for(var src of vrSess.inputSources){
+                if(src.handedness==='right'&&src.gripSpace){
+                    // 從 grip 空間取世界位置
+                    var refSpace=renderer.xr.getReferenceSpace();
+                    // 用 camera 前方 0.5m 作為備用
+                }
+            }
+        }
+        // 備用：camera 前方 0.5m（讓視線就是畫筆）
+        var wp=new THREE.Vector3();
+        camera.getWorldPosition(wp);
+        var wd=new THREE.Vector3(0,0,-1).applyQuaternion(
+            new THREE.Quaternion().setFromEuler(camera.rotation)
+        );
+        return wp.clone().addScaledVector(wd,0.5);
     } else {
-        dir = new THREE.Vector3(Math.sin(fpYaw),0,-Math.cos(fpYaw));
-        pos = fpPos.clone().addScaledVector(dir, 3.5);
+        // 一般模式：前方 3.5m 水平
+        var d=new THREE.Vector3(Math.sin(fpYaw),0,-Math.cos(fpYaw));
+        return fpPos.clone().addScaledVector(d,3.5);
     }
-    var pt=new THREE.Mesh(new THREE.SphereGeometry(brushSize,6,6),new THREE.MeshBasicMaterial({color:brushColor.clone()}));
-    pt.position.copy(pos); scene.add(pt); drawings.push(pt);
-    if(drawings.length>2000) scene.remove(drawings.shift());
 }
-function clearAll(){ drawings.forEach(function(d){scene.remove(d);}); drawings.length=0; }
+
+// ── 開始新筆觸 ───────────────────────────────────────
+function strokeStart(){
+    currentPoints=[];
+    currentStrokeMesh=null;
+    lastDrawPos=null;
+}
+
+// ── 加點到當前筆觸 ───────────────────────────────────
+function strokeAdd(){
+    var pos=getBrushPos();
+    // 距離太近跳過
+    if(lastDrawPos&&pos.distanceTo(lastDrawPos)<MIN_DIST) return;
+    lastDrawPos=pos.clone();
+    currentPoints.push(pos.clone());
+
+    // 少於 2 點無法建線
+    if(currentPoints.length<2) return;
+
+    // 移除舊的預覽 mesh
+    if(currentStrokeMesh){
+        scene.remove(currentStrokeMesh);
+        currentStrokeMesh.geometry.dispose();
+    }
+
+    // 建立 TubeGeometry（平滑筆觸）
+    var path=new THREE.CatmullRomCurve3(
+        currentPoints.length>=3 ? currentPoints : [currentPoints[0],currentPoints[currentPoints.length-1]],
+        false,'catmullrom',0.5
+    );
+    var tubeSegs=Math.max(2,currentPoints.length*3);
+    try{
+        var geo=new THREE.TubeGeometry(path,tubeSegs,brushSize,6,false);
+        var mat=new THREE.MeshBasicMaterial({
+            color:brushColor.clone(),
+            transparent: strokeOpacity<1,
+            opacity: strokeOpacity
+        });
+        currentStrokeMesh=new THREE.Mesh(geo,mat);
+        scene.add(currentStrokeMesh);
+    }catch(e){}
+}
+
+// ── 結束筆觸，提交為永久筆觸 ────────────────────────
+function strokeEnd(){
+    if(currentStrokeMesh&&currentPoints.length>=2){
+        allStrokes.push(currentStrokeMesh);
+        currentStrokeMesh=null;
+    }
+    currentPoints=[];
+    lastDrawPos=null;
+    // 超過 200 筆觸自動清除最舊的
+    if(allStrokes.length>200){
+        var old=allStrokes.shift();
+        scene.remove(old); old.geometry.dispose();
+    }
+}
+
+// ── 一次性畫點（點擊）───────────────────────────────
+function drawDot(){
+    var pos=getBrushPos();
+    var geo=new THREE.SphereGeometry(brushSize*1.2,6,6);
+    var mat=new THREE.MeshBasicMaterial({color:brushColor.clone()});
+    var pt=new THREE.Mesh(geo,mat);
+    pt.position.copy(pos);
+    scene.add(pt);
+    allStrokes.push(pt);
+}
+
+function clearAll(){
+    allStrokes.forEach(function(d){
+        scene.remove(d);
+        if(d.geometry) d.geometry.dispose();
+    });
+    allStrokes.length=0;
+    if(currentStrokeMesh){
+        scene.remove(currentStrokeMesh);
+        currentStrokeMesh=null;
+    }
+    currentPoints=[];
+}
 
 document.querySelectorAll('.bc').forEach(function(el){
     el.addEventListener('click',function(){
@@ -249,6 +351,7 @@ document.querySelectorAll('.bc').forEach(function(el){
     });
 });
 document.getElementById('sz').addEventListener('input',function(e){brushSize=parseFloat(e.target.value);});
+document.getElementById('op').addEventListener('input',function(e){strokeOpacity=parseFloat(e.target.value);});
 document.getElementById('draw-btn').addEventListener('click',function(){
     isDrawing=!isDrawing;
     document.getElementById('draw-btn').classList.toggle('on',isDrawing);
@@ -260,25 +363,30 @@ document.getElementById('clear-mob').addEventListener('touchstart',function(e){e
 var cvs=renderer.domElement;
 cvs.addEventListener('mousedown',function(e){
     if(e.button!==0) return;
-    mouseHeld=true;
-    fpDrag=false;
+    mouseHeld=true; fpDrag=false;
     if(isDrawing){
-        drawDot(); // 點擊立即畫一點
+        strokeStart(); strokeAdd(); // 開始新筆觸
     } else {
-        fpDrag=true; fpDragX=e.clientX; fpDragY=e.clientY||0;
+        fpDrag=true; fpDragX=e.clientX;
     }
 });
 cvs.addEventListener('mousemove',function(e){
     if(!mouseHeld) return;
     if(isDrawing){
-        drawDot(); // 按住拖曳連續畫（無延遲）
+        strokeAdd(); // 拖曳加點（連續平滑筆觸）
     } else if(fpDrag){
         fpYaw-=(e.clientX-fpDragX)*0.004;
         fpDragX=e.clientX;
     }
 });
-cvs.addEventListener('mouseup',function(){mouseHeld=false;fpDrag=false;});
-cvs.addEventListener('mouseleave',function(){mouseHeld=false;fpDrag=false;});
+cvs.addEventListener('mouseup',function(){
+    if(isDrawing) strokeEnd();
+    mouseHeld=false; fpDrag=false;
+});
+cvs.addEventListener('mouseleave',function(){
+    if(isDrawing) strokeEnd();
+    mouseHeld=false; fpDrag=false;
+});
 
 var jBase=document.getElementById('joy-base');
 var jKnob=document.getElementById('joy-knob');
@@ -296,7 +404,7 @@ document.addEventListener('touchstart',function(e){
                 touchIds.cam=t.identifier;
                 mouseHeld=true;
                 if(isDrawing){
-                    drawDot(); // 點下立即畫
+                    strokeStart(); strokeAdd();
                 } else {
                     fpDrag=true; fpDragX=t.clientX;
                 }
@@ -314,7 +422,7 @@ document.addEventListener('touchmove',function(e){
         }
         if(t.identifier===touchIds.cam){
             if(isDrawing && mouseHeld){
-                drawDot(); // 拖曳連續畫
+                strokeAdd();
             } else if(fpDrag && !isDrawing){
                 fpYaw-=(t.clientX-fpDragX)*0.006;
                 fpDragX=t.clientX;
@@ -325,7 +433,7 @@ document.addEventListener('touchmove',function(e){
 document.addEventListener('touchend',function(e){
     Array.from(e.changedTouches).forEach(function(t){
         if(t.identifier===touchIds.joy){touchIds.joy=-1;joyActive=false;joyX=joyY=0;jKnob.style.transform='translate(0,0)';}
-        if(t.identifier===touchIds.cam){touchIds.cam=-1;fpDrag=false;mouseHeld=false;}
+        if(t.identifier===touchIds.cam){if(isDrawing)strokeEnd();touchIds.cam=-1;fpDrag=false;mouseHeld=false;}
     });
 },{passive:true});
 addEventListener('keydown',function(e){keys[e.key.toLowerCase()]=true;});
@@ -377,7 +485,13 @@ function animate(){
             fpPos.z-=Math.sin(fpYaw)*vrIn.moveX*SPEED*1.5;
         }
         // 右手扳機：畫點
-        if(vrIn.trigR){var savedSize=brushSize;brushSize=Math.min(brushSize,0.06);drawDot();brushSize=savedSize;}
+        // VR 右手扳機：持續按住 = 連續筆觸
+        if(vrIn.trigR){
+            if(!mouseHeld){ mouseHeld=true; strokeStart(); }
+            strokeAdd();
+        } else {
+            if(mouseHeld){ strokeEnd(); mouseHeld=false; }
+        }
         // 左手扳機：清除
         if(vrIn.trigL) clearAll();
     } else if(!renderer.xr.isPresenting){
