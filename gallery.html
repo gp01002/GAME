@@ -163,24 +163,35 @@ STUDENTS.forEach(function(art,i){
     var pg=new THREE.Group(); pg.add(frame,card,label);
     pg.position.set(px,3.2,pz); pg.lookAt(0,3.2,0); scene.add(pg);
 
-    var coa=angle+0.2;
+    // 角色站在海報內側前方，面向圓心
+    var charDist = RADIUS - 2.8; // 比海報靠內
+    var cx = Math.cos(angle)*charDist;
+    var cz = Math.sin(angle)*charDist;
     var cg=new THREE.Group();
-    cg.position.set(Math.cos(coa)*(RADIUS-3.2),0,Math.sin(coa)*(RADIUS-3.2));
-    cg.rotation.y=angle+Math.PI; scene.add(cg);
+    cg.position.set(cx, 0, cz);
+    // 面向圓心 = 旋轉讓角色朝向 (0,0,0)
+    cg.rotation.y = angle + Math.PI; // +PI 讓正面朝內
+    scene.add(cg);
+
     loader.load('student_'+i+'.glb',function(gltf){
-        var m=gltf.scene; m.scale.setScalar(3.5); m.rotation.y=-Math.PI*0.5; cg.add(m);
+        var m=gltf.scene;
+        m.scale.setScalar(3.5);          // ★ 統一大小
+        m.rotation.y = -Math.PI * 0.5;  // GLB 模型本身的朝向修正
+        cg.add(m);
     },undefined,function(){
+        // fallback 膠囊人（固定比例）
         var b=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,1.4,8),new THREE.MeshLambertMaterial({color:art.color}));
         b.position.y=1.1; cg.add(b);
-        var h=new THREE.Mesh(new THREE.SphereGeometry(0.38,8,8),new THREE.MeshLambertMaterial({color:art.color}));
-        h.position.y=2.1; cg.add(h);
+        var h2=new THREE.Mesh(new THREE.SphereGeometry(0.38,8,8),new THREE.MeshLambertMaterial({color:art.color}));
+        h2.position.y=2.1; cg.add(h2);
     });
 
+    // 地面光圈
     var rc=new THREE.EllipseCurve(0,0,1.1,1.1,0,Math.PI*2);
     var ring=new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(rc.getPoints(14))),
         new THREE.MeshBasicMaterial({color:new THREE.Color(art.color),transparent:true,opacity:0.25,side:THREE.DoubleSide}));
     ring.rotation.x=-Math.PI/2;
-    ring.position.set(Math.cos(coa)*(RADIUS-3.2),0.05,Math.sin(coa)*(RADIUS-3.2));
+    ring.position.set(cx, 0.05, cz);
     scene.add(ring);
 });
 
