@@ -154,7 +154,7 @@ renderer.shadowMap.enabled = true;
 document.getElementById('game-container').appendChild(renderer.domElement);
 
 function buildScene(){
-    scene.background = new THREE.Color(0x02050f);
+    scene.background = new THREE.Color(0x87ceeb);  // 天藍 fallback
     scene.fog = new THREE.FogExp2(0x02050f, 0.012);
     // 星星
     const sp=[], sg=new THREE.BufferGeometry();
@@ -162,9 +162,13 @@ function buildScene(){
     sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
     scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:0.18,transparent:true,opacity:0.7})));
     // 地板
-    const grid=new THREE.GridHelper(500,100,0x1a3a6a,0x0a1a3a); grid.position.y=0.01; scene.add(grid);
-    const floor=new THREE.Mesh(new THREE.PlaneGeometry(500,500),new THREE.MeshStandardMaterial({color:0x050e22,metalness:0.3,roughness:0.8}));
+    // 草地地板（純綠，無格線）
+    const floor=new THREE.Mesh(new THREE.PlaneGeometry(500,500),
+        new THREE.MeshStandardMaterial({color:0x3a7d20,roughness:0.95,metalness:0.0}));
     floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
+    // 細微草地紋理用第二層半透明格線（非常淡）
+    const grid=new THREE.GridHelper(500,80,0x2a6010,0x2a6010);
+    grid.material.transparent=true; grid.material.opacity=0.08; grid.position.y=0.02; scene.add(grid);
     // 燈光
     scene.add(new THREE.AmbientLight(0xffffff,2.5));
     const sun=new THREE.DirectionalLight(0xffffff,3); sun.position.set(20,40,20); sun.castShadow=true; scene.add(sun);
@@ -197,7 +201,7 @@ function buildScene(){
         pos.setY(i, h);
     }
     terrainGeo.computeVertexNormals();
-    const terrainMat=new THREE.MeshStandardMaterial({color:0x2d5a1b,roughness:0.95,metalness:0.0});
+    const terrainMat=new THREE.MeshStandardMaterial({color:0x3a7520,roughness:0.92,metalness:0.0});
     const terrain=new THREE.Mesh(terrainGeo,terrainMat);
     terrain.receiveShadow=true;
     scene.add(terrain);
@@ -224,7 +228,7 @@ function buildScene(){
     });
 
     // ── 水窪 ────────────────────────────────────
-    const waterMat=new THREE.MeshStandardMaterial({color:0x2266aa,metalness:0.4,roughness:0.15,transparent:true,opacity:0.72});
+    const waterMat=new THREE.MeshStandardMaterial({color:0x0a1a2a,metalness:0.7,roughness:0.05,transparent:true,opacity:0.88});
     [
         {x:18,z:-22,rx:5.5,rz:3.2},{x:-20,z:15,rx:4,rz:4.5},
         {x:5,z:30,rx:3,rz:2},{x:-30,z:-18,rx:6,rz:2.5},
@@ -237,7 +241,7 @@ function buildScene(){
         waterMesh.rotation.x=-Math.PI/2; waterMesh.position.set(x,0.04,z);
         scene.add(waterMesh);
         // 水面光點
-        const wl=new THREE.PointLight(0x4488ff,0.8,12); wl.position.set(x,0.5,z); scene.add(wl);
+        const wl=new THREE.PointLight(0x224488,0.6,10); wl.position.set(x,0.5,z); scene.add(wl);
     });
 
     // ── 卡通樹 ────────────────────────────────────

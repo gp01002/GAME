@@ -163,23 +163,25 @@ STUDENTS.forEach(function(art,i){
     var pg=new THREE.Group(); pg.add(frame,card,label);
     pg.position.set(px,3.2,pz); pg.lookAt(0,3.2,0); scene.add(pg);
 
-    // 角色站在海報內側前方，面向圓心
-    var charDist = RADIUS - 2.8; // 比海報靠內
+    // 角色站在海報正前方（稍靠內），面向圓心外側（正面朝觀眾）
+    var charDist = RADIUS - 3.0;
     var cx = Math.cos(angle)*charDist;
     var cz = Math.sin(angle)*charDist;
     var cg=new THREE.Group();
     cg.position.set(cx, 0, cz);
-    // 面向圓心 = 旋轉讓角色朝向 (0,0,0)
-    cg.rotation.y = angle + Math.PI; // +PI 讓正面朝內
+    // 讓角色朝向圓圈外側（觀眾走近時看到正面）
+    // angle = 角色所在方位角，面朝圓心 = angle + Math.PI
+    // 但由於 GLB 模型預設面向 +Z，需要 CHAR_MODEL_ROTATE(-PI*0.5) 修正
+    // 最終: cg.rotation.y = angle（配合 model.rotation.y = Math.PI + π/2）
+    cg.rotation.y = angle; // 面向圓心外側
     scene.add(cg);
 
     loader.load('student_'+i+'.glb',function(gltf){
         var m=gltf.scene;
-        m.scale.setScalar(3.5);          // ★ 統一大小
-        m.rotation.y = -Math.PI * 0.5;  // GLB 模型本身的朝向修正
+        m.scale.setScalar(2.8);          // ★ 統一大小（稍縮小讓比例正常）
+        m.rotation.y = Math.PI + Math.PI*0.5; // GLB +180°+90° 讓正面朝外
         cg.add(m);
     },undefined,function(){
-        // fallback 膠囊人（固定比例）
         var b=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,1.4,8),new THREE.MeshLambertMaterial({color:art.color}));
         b.position.y=1.1; cg.add(b);
         var h2=new THREE.Mesh(new THREE.SphereGeometry(0.38,8,8),new THREE.MeshLambertMaterial({color:art.color}));
@@ -231,10 +233,20 @@ document.getElementById('clear-btn').addEventListener('click',clearAll);
 document.getElementById('clear-mob').addEventListener('touchstart',function(e){e.preventDefault();clearAll();},{passive:false});
 
 var cvs=renderer.domElement;
-cvs.addEventListener('mousedown',function(e){mouseHeld=true;if(!isDrawing){fpDrag=true;fpDragX=e.clientX;}});
-cvs.addEventListener('mousemove',function(e){if(fpDrag){fpYaw-=(e.clientX-fpDragX)*0.005;fpDragX=e.clientX;}});
+cvs.addEventListener('mousedown',function(e){
+    mouseHeld=true;
+    if(isDrawing){ drawDot(); }  // 點擊立即畫
+    else { fpDrag=true; fpDragX=e.clientX; }
+});
+cvs.addEventListener('mousemove',function(e){
+    if(isDrawing && mouseHeld){
+        drawDot();  // 拖曳連續畫（直接在事件裡呼叫，無延遲）
+    } else if(fpDrag){
+        fpYaw-=(e.clientX-fpDragX)*0.005; fpDragX=e.clientX;
+    }
+});
 cvs.addEventListener('mouseup',function(){mouseHeld=false;fpDrag=false;});
-cvs.addEventListener('mouseleave',function(){fpDrag=false;});
+cvs.addEventListener('mouseleave',function(){mouseHeld=false;fpDrag=false;});
 
 var jBase=document.getElementById('joy-base');
 var jKnob=document.getElementById('joy-knob');
@@ -246,7 +258,11 @@ document.addEventListener('touchstart',function(e){
         var jr=jZone.getBoundingClientRect();
         var inJ=t.clientX>=jr.left&&t.clientX<=jr.right&&t.clientY>=jr.top&&t.clientY<=jr.bottom;
         if(inJ){if(touchIds.joy===-1){touchIds.joy=t.identifier;joyActive=true;}}
-        else{if(touchIds.cam===-1){touchIds.cam=t.identifier;fpDrag=true;fpDragX=t.clientX;}}
+        else{if(touchIds.cam===-1){
+            touchIds.cam=t.identifier; mouseHeld=true;
+            if(!isDrawing){fpDrag=true;fpDragX=t.clientX;}
+            else{drawDot();}  // 觸控點下立即畫
+        }}
     });
 },{passive:true});
 document.addEventListener('touchmove',function(e){
@@ -257,13 +273,16 @@ document.addEventListener('touchmove',function(e){
             var d=Math.hypot(joyX,joyY); if(d>1){joyX/=d;joyY/=d;}
             jKnob.style.transform='translate('+joyX*32+'px,'+joyY*32+'px)';
         }
-        if(t.identifier===touchIds.cam&&fpDrag){fpYaw-=(t.clientX-fpDragX)*0.006;fpDragX=t.clientX;}
+        if(t.identifier===touchIds.cam){
+            if(isDrawing&&mouseHeld){ drawDot(); }
+            else if(fpDrag){ fpYaw-=(t.clientX-fpDragX)*0.006; fpDragX=t.clientX; }
+        }
     });
 },{passive:true});
 document.addEventListener('touchend',function(e){
     Array.from(e.changedTouches).forEach(function(t){
         if(t.identifier===touchIds.joy){touchIds.joy=-1;joyActive=false;joyX=joyY=0;jKnob.style.transform='translate(0,0)';}
-        if(t.identifier===touchIds.cam){touchIds.cam=-1;fpDrag=false;}
+        if(t.identifier===touchIds.cam){touchIds.cam=-1;fpDrag=false;mouseHeld=false;}
     });
 },{passive:true});
 addEventListener('keydown',function(e){keys[e.key.toLowerCase()]=true;});
@@ -290,7 +309,6 @@ function animate(){
     }
     fpPos.x=Math.max(-55,Math.min(55,fpPos.x));
     fpPos.z=Math.max(-55,Math.min(55,fpPos.z));
-    if(isDrawing&&mouseHeld) drawDot();
     if(renderer.xr.isPresenting){
         vrRig.position.set(fpPos.x,fpPos.y,fpPos.z);
     } else {
