@@ -163,29 +163,39 @@ STUDENTS.forEach(function(art,i){
     var pg=new THREE.Group(); pg.add(frame,card,label);
     pg.position.set(px,3.2,pz); pg.lookAt(0,3.2,0); scene.add(pg);
 
-    // 角色站在海報正前方（稍靠內），面向圓心外側（正面朝觀眾）
+    // 角色站在海報正前方，面向外側（朝觀眾）
     var charDist = RADIUS - 3.0;
     var cx = Math.cos(angle)*charDist;
     var cz = Math.sin(angle)*charDist;
-    var cg=new THREE.Group();
+    var cg = new THREE.Group();
     cg.position.set(cx, 0, cz);
-    // 讓角色朝向圓圈外側（觀眾走近時看到正面）
-    // angle = 角色所在方位角，面朝圓心 = angle + Math.PI
-    // 但由於 GLB 模型預設面向 +Z，需要 CHAR_MODEL_ROTATE(-PI*0.5) 修正
-    // 最終: cg.rotation.y = angle（配合 model.rotation.y = Math.PI + π/2）
-    cg.rotation.y = angle; // 面向圓心外側
+    // 讓角色正面朝外（觀眾進來看到正面）
+    // cg 朝向 = 從角色位置指向原點的反方向
+    cg.lookAt(0, 0, 0);               // 先 lookAt 圓心
+    cg.rotation.y += Math.PI;         // 再轉 180° = 背對圓心 = 正面朝外
     scene.add(cg);
 
     loader.load('student_'+i+'.glb',function(gltf){
-        var m=gltf.scene;
-        m.scale.setScalar(2.8);          // ★ 統一大小（稍縮小讓比例正常）
-        m.rotation.y = Math.PI + Math.PI*0.5; // GLB +180°+90° 讓正面朝外
+        var m = gltf.scene;
+        // ── 統一縮放：先 scale=1 計算 BoundingBox 高度，再統一縮放到 3.5m ──
+        m.scale.setScalar(1);
+        var box = new THREE.Box3().setFromObject(m);
+        var h = box.max.y - box.min.y;
+        var targetH = 3.5; // 目標身高 3.5 單位，所有角色統一
+        var s = h > 0.01 ? targetH / h : 3.5;
+        m.scale.setScalar(s);
+        // GLB 朝向修正（讓模型正面對齊容器前方）
+        m.rotation.y = -Math.PI * 0.5;
+        // 腳踩地面
+        var box2 = new THREE.Box3().setFromObject(m);
+        m.position.y = -box2.min.y;
         cg.add(m);
     },undefined,function(){
-        var b=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,1.4,8),new THREE.MeshLambertMaterial({color:art.color}));
-        b.position.y=1.1; cg.add(b);
-        var h2=new THREE.Mesh(new THREE.SphereGeometry(0.38,8,8),new THREE.MeshLambertMaterial({color:art.color}));
-        h2.position.y=2.1; cg.add(h2);
+        // fallback
+        var b=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,1.6,8),new THREE.MeshLambertMaterial({color:art.color}));
+        b.position.y=0.8; cg.add(b);
+        var h2=new THREE.Mesh(new THREE.SphereGeometry(0.4,8,8),new THREE.MeshLambertMaterial({color:art.color}));
+        h2.position.y=2.0; cg.add(h2);
     });
 
     // 地面光圈

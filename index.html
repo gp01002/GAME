@@ -213,10 +213,10 @@ function buildScene(){
         [90,0,10],[-90,0,-15],[15,0,88],[-20,0,-88],
         [55,0,80],[-60,0,78]
     ];
-    hillPositions.forEach(([x,,z])=>{
+    hillPositions.forEach(function(hp){ var x=hp[0], z=hp[2];
         const h=8+Math.random()*10, r=10+Math.random()*8;
         const hg=new THREE.ConeGeometry(r,h,5);
-        const hm=new THREE.Mesh(hg,hillMat); hm.castShadow=true; hm.receiveShadow=true;
+        const hm=new THREE.Mesh(hg,hillMat); 
         hm.position.set(x,h*0.35,z);
         hm.rotation.y=Math.random()*Math.PI;
         scene.add(hm);
