@@ -181,7 +181,7 @@ STUDENTS.forEach(function(art,i){
         m.scale.setScalar(1);
         var box = new THREE.Box3().setFromObject(m);
         var natH = box.max.y - box.min.y;
-        var targetH = 1.8;
+        var targetH = 2.0; // 以 student_13 為基準
         var s = natH > 0.01 ? targetH / natH : 1;
         m.scale.setScalar(s);
         // 旋轉：先 model 轉 -90° 修正 GLB 朝向，再整體反轉 180° 讓正面朝外
@@ -303,24 +303,75 @@ addEventListener('resize',function(){
 });
 
 var SPEED=0.15;
+
+// ── VR 控制器設定 ───────────────────────────────────────────
+var vrCtrlL=null, vrCtrlR=null;
+var vrLastTriggerR=false, vrDrawing=false;
+
+renderer.xr.addEventListener('sessionstart',function(){
+    vrCtrlL = renderer.xr.getController(0); // 左手：移動
+    vrCtrlR = renderer.xr.getController(1); // 右手：畫筆 / 轉向
+    scene.add(vrCtrlL); scene.add(vrCtrlR);
+
+    // 右手扳機 → 開關畫筆
+    vrCtrlR.addEventListener('selectstart',function(){ vrDrawing=true; isDrawing=true; });
+    vrCtrlR.addEventListener('selectend',  function(){ vrDrawing=false; });
+    // 左手扳機 → 清除畫筆
+    vrCtrlL.addEventListener('selectstart',function(){ clearAll(); });
+});
+renderer.xr.addEventListener('sessionend',function(){
+    vrCtrlL=null; vrCtrlR=null; vrDrawing=false;
+});
+
+function readVRGamepad(hand){
+    if(!hand) return null;
+    var src=hand.inputSource;
+    if(src&&src.gamepad&&src.gamepad.axes&&src.gamepad.axes.length>=4)
+        return {x:src.gamepad.axes[2], y:src.gamepad.axes[3]};
+    return null;
+}
+
 function animate(){
     var fwdX=Math.sin(fpYaw), fwdZ=Math.cos(fpYaw);
-    if(keys['w']||keys['arrowup'])   {fpPos.x-=fwdX*SPEED;fpPos.z-=fwdZ*SPEED;}
-    if(keys['s']||keys['arrowdown']) {fpPos.x+=fwdX*SPEED;fpPos.z+=fwdZ*SPEED;}
-    if(keys['a']||keys['arrowleft']) fpYaw+=0.04;
-    if(keys['d']||keys['arrowright'])fpYaw-=0.04;
-    if(joyActive){
-        var d=Math.hypot(joyX,joyY);
-        if(d>0.1){
-            fpPos.x-=fwdX*SPEED*(-joyY)*Math.min(d,1);
-            fpPos.z-=fwdZ*SPEED*(-joyY)*Math.min(d,1);
-            fpYaw  -=joyX*0.055*Math.min(d,1);
+
+    if(renderer.xr.isPresenting){
+        // ── VR 左手搖桿：前後左右移動 ────────────────────
+        var gl=readVRGamepad(vrCtrlL);
+        if(gl){
+            var vd=Math.hypot(gl.x,gl.y);
+            if(vd>0.15){
+                fpPos.x-=fwdX*SPEED*(-gl.y)*Math.min(vd,1)*1.5;
+                fpPos.z-=fwdZ*SPEED*(-gl.y)*Math.min(vd,1)*1.5;
+            }
+        }
+        // ── VR 右手搖桿：左右轉向 ─────────────────────────
+        var gr=readVRGamepad(vrCtrlR);
+        if(gr&&Math.abs(gr.x)>0.2) fpYaw-=gr.x*0.04;
+        // ── VR 右手扳機按住：在前方畫點 ───────────────────
+        if(vrDrawing) drawDot();
+    } else {
+        // ── 鍵盤 WASD ────────────────────────────────────
+        if(keys['w']||keys['arrowup'])   {fpPos.x-=fwdX*SPEED;fpPos.z-=fwdZ*SPEED;}
+        if(keys['s']||keys['arrowdown']) {fpPos.x+=fwdX*SPEED;fpPos.z+=fwdZ*SPEED;}
+        if(keys['a']||keys['arrowleft']) fpYaw+=0.04;
+        if(keys['d']||keys['arrowright'])fpYaw-=0.04;
+        // ── 手機搖桿 ─────────────────────────────────────
+        if(joyActive){
+            var d=Math.hypot(joyX,joyY);
+            if(d>0.1){
+                fpPos.x-=fwdX*SPEED*(-joyY)*Math.min(d,1);
+                fpPos.z-=fwdZ*SPEED*(-joyY)*Math.min(d,1);
+                fpYaw  -=joyX*0.055*Math.min(d,1);
+            }
         }
     }
+
     fpPos.x=Math.max(-55,Math.min(55,fpPos.x));
     fpPos.z=Math.max(-55,Math.min(55,fpPos.z));
+
     if(renderer.xr.isPresenting){
-        vrRig.position.set(fpPos.x,fpPos.y,fpPos.z);
+        vrRig.position.set(fpPos.x, 0, fpPos.z);
+        vrRig.rotation.y = fpYaw;
     } else {
         vrRig.position.set(0,0,0);
         camera.position.copy(fpPos);

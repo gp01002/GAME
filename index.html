@@ -78,6 +78,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRButton }   from 'three/addons/webxr/VRButton.js';
 import { initializeApp }   from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, getDocs, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
@@ -151,7 +152,32 @@ renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = false;
+renderer.xr.enabled = true;
 document.getElementById('game-container').appendChild(renderer.domElement);
+
+// VR Rig（攝影機容器，隨 VR 頭顯移動）
+const vrRig = new THREE.Group();
+vrRig.add(camera);
+scene.add(vrRig);
+
+// VR 控制器
+let vrCtrlL=null, vrCtrlR=null, vrMoving=false;
+renderer.xr.addEventListener('sessionstart',()=>{
+    vrCtrlL=renderer.xr.getController(0);
+    vrCtrlR=renderer.xr.getController(1);
+    scene.add(vrCtrlL); scene.add(vrCtrlR);
+    // 右手扳機 → 發射
+    vrCtrlR.addEventListener('selectstart',()=>shoot());
+});
+renderer.xr.addEventListener('sessionend',()=>{ vrCtrlL=null; vrCtrlR=null; });
+
+function readVRPad(hand){
+    if(!hand) return null;
+    var s=hand.inputSource;
+    if(s&&s.gamepad&&s.gamepad.axes&&s.gamepad.axes.length>=4)
+        return {x:s.gamepad.axes[2], y:s.gamepad.axes[3]};
+    return null;
+}
 
 function buildScene(){
     scene.background = new THREE.Color(0x87ceeb);  // 天藍 fallback
@@ -851,12 +877,18 @@ const clock=new THREE.Clock();
 let foodBob=0;
 
 function animate(){
-    requestAnimationFrame(animate);
     const dt=clock.getDelta();
     foodBob+=dt*2;
     updateTimer();
     tickWeather(dt);
     if(roundOver){renderer.render(scene,camera);return;}
+
+    // ── VR 左手搖桿移動 ─────────────────────────────────
+    if(renderer.xr.isPresenting){
+        const gl=readVRPad(vrCtrlL), gr=readVRPad(vrCtrlR);
+        if(gl){const vd=Math.hypot(gl.x,gl.y);if(vd>0.15){myGroup.position.x+=Math.sin(myGroup.rotation.y)*(-gl.y)*CONFIG.MOVE_SPEED*vd*1.5;myGroup.position.z+=Math.cos(myGroup.rotation.y)*(-gl.y)*CONFIG.MOVE_SPEED*vd*1.5;}}
+        if(gr&&Math.abs(gr.x)>0.2) myGroup.rotation.y-=gr.x*0.04;
+    }
 
     // 移動（鍵盤）
     let spd=0;
@@ -949,11 +981,17 @@ function animate(){
     }
 
     // 攝影機
-    const cx=myGroup.position.x+Math.sin(camAngle)*CAM_DIST*Math.cos(camPitch);
-    const cy=myGroup.position.y+Math.sin(camPitch)*CAM_DIST+CAM_H*0.3;
-    const cz=myGroup.position.z+Math.cos(camAngle)*CAM_DIST*Math.cos(camPitch);
-    camera.position.lerp(new THREE.Vector3(cx,cy,cz),0.1);
-    camera.lookAt(myGroup.position.x,1.5,myGroup.position.z);
+    if(renderer.xr.isPresenting){
+        vrRig.position.set(myGroup.position.x,1.6,myGroup.position.z);
+        vrRig.rotation.y=myGroup.rotation.y;
+    } else {
+        vrRig.position.set(0,0,0); vrRig.rotation.y=0;
+        const cx=myGroup.position.x+Math.sin(camAngle)*CAM_DIST*Math.cos(camPitch);
+        const cy=myGroup.position.y+Math.sin(camPitch)*CAM_DIST+CAM_H*0.3;
+        const cz=myGroup.position.z+Math.cos(camAngle)*CAM_DIST*Math.cos(camPitch);
+        camera.position.lerp(new THREE.Vector3(cx,cy,cz),0.1);
+        camera.lookAt(myGroup.position.x,1.5,myGroup.position.z);
+    }
     renderer.render(scene,camera);
 }
 
@@ -1016,7 +1054,13 @@ initUI();
 switchChar(0);
 await preloadFoodGLBs();
 initFirebase();
-animate();
+
+// VR 按鈕
+const vrBtn=VRButton.createButton(renderer);
+vrBtn.style.cssText+='position:fixed;bottom:85px;left:50%;transform:translateX(-50%);z-index:200;font-size:12px;';
+document.body.appendChild(vrBtn);
+
+renderer.setAnimationLoop(animate); // 支援 VR requestAnimationFrame
 </script>
 </body>
 </html>
