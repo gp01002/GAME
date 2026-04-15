@@ -164,19 +164,26 @@ scene.add(vrRig);
 let vrCtrlL=null, vrCtrlR=null, vrMoving=false;
 renderer.xr.addEventListener('sessionstart',()=>{
     vrCtrlL=renderer.xr.getController(0);
-    vrCtrlR=renderer.xr.getController(1);
-    scene.add(vrCtrlL); scene.add(vrCtrlR);
-    // 右手扳機 → 發射
-    vrCtrlR.addEventListener('selectstart',()=>shoot());
+    // 右手扳機由 inputSource buttons[0] 在 animate 偵測
 });
 renderer.xr.addEventListener('sessionend',()=>{ vrCtrlL=null; vrCtrlR=null; });
 
-function readVRPad(hand){
-    if(!hand) return null;
-    var s=hand.inputSource;
-    if(s&&s.gamepad&&s.gamepad.axes&&s.gamepad.axes.length>=4)
-        return {x:s.gamepad.axes[2], y:s.gamepad.axes[3]};
-    return null;
+// 使用 getSession().inputSources 直接讀取（相容性最佳）
+function getVRInput(){
+    var session=renderer.xr.getSession();
+    if(!session) return null;
+    var moveX=0,moveZ=0,rotY=0;
+    for(var src of session.inputSources){
+        if(src.gamepad&&src.gamepad.axes){
+            var ax=src.gamepad.axes;
+            if(src.handedness==='left'){
+                moveX=ax[2]||0; moveZ=ax[3]||0;
+            } else if(src.handedness==='right'){
+                rotY=ax[2]||0;
+            }
+        }
+    }
+    return {moveX,moveZ,rotY};
 }
 
 function buildScene(){
@@ -883,11 +890,21 @@ function animate(){
     tickWeather(dt);
     if(roundOver){renderer.render(scene,camera);return;}
 
-    // ── VR 左手搖桿移動 ─────────────────────────────────
-    if(renderer.xr.isPresenting){
-        const gl=readVRPad(vrCtrlL), gr=readVRPad(vrCtrlR);
-        if(gl){const vd=Math.hypot(gl.x,gl.y);if(vd>0.15){myGroup.position.x+=Math.sin(myGroup.rotation.y)*(-gl.y)*CONFIG.MOVE_SPEED*vd*1.5;myGroup.position.z+=Math.cos(myGroup.rotation.y)*(-gl.y)*CONFIG.MOVE_SPEED*vd*1.5;}}
-        if(gr&&Math.abs(gr.x)>0.2) myGroup.rotation.y-=gr.x*0.04;
+    // ── VR 移動（左手搖桿前後平移，右手搖桿轉向）──────
+    var vrIn=getVRInput();
+    // 右手扳機（button[0]）→ 發射
+    var vrSession=renderer.xr.getSession();
+    if(vrSession){for(var src of vrSession.inputSources){if(src.handedness==='right'&&src.gamepad&&src.gamepad.buttons[0]&&src.gamepad.buttons[0].pressed){shoot();break;}}}
+    if(vrIn){
+        myGroup.rotation.y-=vrIn.rotY*0.04;
+        var vd=Math.hypot(vrIn.moveX,vrIn.moveZ);
+        if(vd>0.15){
+            var vy=myGroup.rotation.y;
+            myGroup.position.x-=Math.sin(vy)*vrIn.moveZ*CONFIG.MOVE_SPEED*1.5;
+            myGroup.position.z-=Math.cos(vy)*vrIn.moveZ*CONFIG.MOVE_SPEED*1.5;
+            myGroup.position.x+=Math.cos(vy)*vrIn.moveX*CONFIG.MOVE_SPEED*1.5;
+            myGroup.position.z-=Math.sin(vy)*vrIn.moveX*CONFIG.MOVE_SPEED*1.5;
+        }
     }
 
     // 移動（鍵盤）
@@ -982,7 +999,8 @@ function animate(){
 
     // 攝影機
     if(renderer.xr.isPresenting){
-        vrRig.position.set(myGroup.position.x,1.6,myGroup.position.z);
+        // VR：vrRig 跟隨角色，Y=0（頭顯自帶 1.6m 高度）
+        vrRig.position.set(myGroup.position.x,0,myGroup.position.z);
         vrRig.rotation.y=myGroup.rotation.y;
     } else {
         vrRig.position.set(0,0,0); vrRig.rotation.y=0;
