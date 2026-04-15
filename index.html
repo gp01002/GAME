@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D 多人貪食蛇</title>
+    <title>永平高中5GVR虛擬角色</title>
     <style>
         *{box-sizing:border-box;}
         body{margin:0;overflow:hidden;background:#02050f;font-family:"Microsoft JhengHei",sans-serif;touch-action:none;}
@@ -136,8 +136,8 @@ const students = [
     {name:"金煜喬",color:0xaa8866},{name:"陳品霖",color:0x888888},
     {name:"許博勛",color:0xffaa00},{name:"陳湘妮",color:0xffeeee},
     {name:"劉奕汝",color:0xffcccc},{name:"蔡明樺",color:0xccccff},
-    {name:"鍾凱羽",color:0xccffcc},{name:"學員18",color:0x445566},
-    {name:"學員19",color:0x556677},{name:"學員20",color:0x667788}
+    {name:"鍾凱羽",color:0xccffcc},{name:"林子婷",color:0x445566},
+    {name:"楊貽婷",color:0x7755aa},{name:"金羽姍",color:0xffcc44}
 ];
 const FOOD_COLORS=[0xff3333,0x33ff66,0xffff33,0xff33ff,0x33ffff,0xff8800,0xffffff,0x00aaff,0xff6699];
 
@@ -147,10 +147,10 @@ const FOOD_COLORS=[0xff3333,0x33ff66,0xffff33,0xff33ff,0x33ffff,0xff8800,0xfffff
 const scene    = new THREE.Scene();
 const camera   = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setPixelRatio(devicePixelRatio);
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = false;
 document.getElementById('game-container').appendChild(renderer.domElement);
 
 function buildScene(){
@@ -158,20 +158,20 @@ function buildScene(){
     scene.fog = new THREE.FogExp2(0x02050f, 0.012);
     // 星星
     const sp=[], sg=new THREE.BufferGeometry();
-    for(let i=0;i<3000;i++) sp.push((Math.random()-.5)*400,Math.random()*80+5,(Math.random()-.5)*400);
+    for(let i=0;i<1000;i++) sp.push((Math.random()-.5)*400,Math.random()*80+5,(Math.random()-.5)*400);
     sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
     scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:0.18,transparent:true,opacity:0.7})));
     // 地板
     // 草地地板（純綠，無格線）
     const floor=new THREE.Mesh(new THREE.PlaneGeometry(500,500),
         new THREE.MeshStandardMaterial({color:0x3a7d20,roughness:0.95,metalness:0.0}));
-    floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
+    floor.rotation.x=-Math.PI/2; // floor.receiveShadow=false; scene.add(floor);
     // 細微草地紋理用第二層半透明格線（非常淡）
     const grid=new THREE.GridHelper(500,80,0x2a6010,0x2a6010);
     grid.material.transparent=true; grid.material.opacity=0.08; grid.position.y=0.02; scene.add(grid);
     // 燈光
     scene.add(new THREE.AmbientLight(0xffffff,2.5));
-    const sun=new THREE.DirectionalLight(0xffffff,3); sun.position.set(20,40,20); sun.castShadow=true; scene.add(sun);
+    const sun=new THREE.DirectionalLight(0xffffff,3); sun.position.set(20,40,20); // sun.castShadow=false; scene.add(sun);
     const rl1=new THREE.PointLight(0x88ddff,4,120); rl1.position.set(0,20,0); scene.add(rl1);
     const rl2=new THREE.PointLight(0xffccaa,2,80);  rl2.position.set(-30,10,30); scene.add(rl2);
     const rl3=new THREE.PointLight(0xaaffcc,2,80);  rl3.position.set(30,10,-30); scene.add(rl3);
@@ -186,7 +186,7 @@ function buildScene(){
     if(CONFIG.SKY_IMG) new THREE.TextureLoader().load(CONFIG.SKY_IMG,t=>{t.mapping=THREE.EquirectangularReflectionMapping;scene.background=t;});
 
     // ── 起伏地形 ─────────────────────────────────
-    const terrainSize=120, terrainSegs=48;
+    const terrainSize=120, terrainSegs=32;
     const terrainGeo=new THREE.PlaneGeometry(terrainSize,terrainSize,terrainSegs,terrainSegs);
     terrainGeo.rotateX(-Math.PI/2);
     const pos=terrainGeo.attributes.position;
@@ -203,7 +203,7 @@ function buildScene(){
     terrainGeo.computeVertexNormals();
     const terrainMat=new THREE.MeshStandardMaterial({color:0x3a7520,roughness:0.92,metalness:0.0});
     const terrain=new THREE.Mesh(terrainGeo,terrainMat);
-    terrain.receiveShadow=true;
+    // terrain.receiveShadow=false;
     scene.add(terrain);
 
     // ── 山丘（外圍）────────────────────────────
@@ -215,7 +215,7 @@ function buildScene(){
     ];
     hillPositions.forEach(([x,,z])=>{
         const h=8+Math.random()*10, r=10+Math.random()*8;
-        const hg=new THREE.ConeGeometry(r,h,7+Math.floor(Math.random()*4));
+        const hg=new THREE.ConeGeometry(r,h,5);
         const hm=new THREE.Mesh(hg,hillMat); hm.castShadow=true; hm.receiveShadow=true;
         hm.position.set(x,h*0.35,z);
         hm.rotation.y=Math.random()*Math.PI;
@@ -248,7 +248,7 @@ function buildScene(){
     const trunkMat=new THREE.MeshLambertMaterial({color:0x8B5E3C});
     const foliageColors=[0x2d8a2d,0x3aa03a,0x228822,0x4ab84a,0x1a7a1a];
     const treePositions=[];
-    for(let i=0;i<28;i++){
+    for(let i=0;i<18;i++){
         let tx,tz,attempts=0;
         do{
             const angle=Math.random()*Math.PI*2, dist=20+Math.random()*45;
@@ -274,7 +274,7 @@ function buildScene(){
         new THREE.MeshStandardMaterial({color:0x6a6a6a,roughness:0.9,metalness:0.0}),
         new THREE.MeshStandardMaterial({color:0x9a8a7a,roughness:0.8,metalness:0.08}),
     ];
-    for(let i=0;i<20;i++){
+    for(let i=0;i<8;i++){
         const angle=Math.random()*Math.PI*2, dist=15+Math.random()*50;
         const sx=Math.cos(angle)*dist, sz=Math.sin(angle)*dist;
         const sw=0.4+Math.random()*1.0, sh=0.3+Math.random()*0.7, sd=0.4+Math.random()*0.9;
@@ -288,7 +288,7 @@ function buildScene(){
     }
 
     // ── 蘑菇（點綴）────────────────────────────
-    for(let i=0;i<12;i++){
+    for(let i=0;i<8;i++){
         const angle=Math.random()*Math.PI*2, dist=8+Math.random()*35;
         const mx=Math.cos(angle)*dist, mz=Math.sin(angle)*dist;
         const ms=0.35+Math.random()*0.4;
@@ -532,7 +532,7 @@ async function loadModel(idx,grp){
             const m=gltf.scene;
             m.scale.setScalar(CONFIG.CHAR_SCALE);
             m.rotation.y=CONFIG.CHAR_MODEL_ROTATE;
-            m.traverse(n=>{if(n.isMesh){n.castShadow=true;n.receiveShadow=true;}});
+            m.traverse(n=>{if(n.isMesh){//}});
             grp.add(m);
             const mixer=new THREE.AnimationMixer(m), a=gltf.animations, ac={};
             if(a[CONFIG.CHAR_IDLE_IDX]){ac.idle=mixer.clipAction(a[CONFIG.CHAR_IDLE_IDX]);ac.idle.play();}
@@ -981,10 +981,19 @@ function initUI(){
     const galleryCard = document.createElement('div');
     galleryCard.className='character-card';
     galleryCard.style.cssText='border-color:#ff88ff;background:rgba(255,136,255,0.1);';
-    galleryCard.innerHTML=`<div class="character-icon" style="background-color:#884488;background-image:url('icon_21.jpg')"></div><div class="character-name">🖼️ 藝廊</div>`;
+    galleryCard.innerHTML=`<div class="character-icon" style="background-color:#884488;background-image:url('icon_21.jpg')"></div><div class="character-name">🖼️ 虛擬展場</div>`;
     galleryCard.onclick=()=>location.href='gallery.html';
-    galleryCard.title='虛擬藝廊';
+    galleryCard.title='虛擬展場';
     grid.appendChild(galleryCard);
+
+    // icon_22: 貪美食（重新整理遊戲）
+    const gameCard = document.createElement('div');
+    gameCard.className='character-card';
+    gameCard.style.cssText='border-color:#00f2ff;background:rgba(0,242,255,0.1);';
+    gameCard.innerHTML=`<div class="character-icon" style="background-color:#0a2a4a;background-image:url('icon_22.jpg')"></div><div class="character-name">🍎 貪美食</div>`;
+    gameCard.onclick=()=>location.reload();
+    gameCard.title='貪美食';
+    grid.appendChild(gameCard);
 }
 function updateCardUI(idxs){
     document.querySelectorAll('.character-card').forEach((c,i)=>{
