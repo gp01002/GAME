@@ -171,31 +171,31 @@ STUDENTS.forEach(function(art,i){
     cg.position.set(cx, 0, cz);
     // 讓角色正面朝外（觀眾進來看到正面）
     // cg 朝向 = 從角色位置指向原點的反方向
-    cg.lookAt(0, 0, 0);               // 先 lookAt 圓心
-    cg.rotation.y += Math.PI;         // 再轉 180° = 背對圓心 = 正面朝外
+    // rotation.y = angle → 容器朝向圓心外側（正面朝外）
+    cg.rotation.y = angle;
     scene.add(cg);
 
     loader.load('student_'+i+'.glb',function(gltf){
         var m = gltf.scene;
-        // ── 統一縮放：先 scale=1 計算 BoundingBox 高度，再統一縮放到 3.5m ──
+        // 先用 scale=1 量 BoundingBox，統一縮放到 1.8m 身高
         m.scale.setScalar(1);
         var box = new THREE.Box3().setFromObject(m);
-        var h = box.max.y - box.min.y;
-        var targetH = 3.5; // 目標身高 3.5 單位，所有角色統一
-        var s = h > 0.01 ? targetH / h : 3.5;
+        var natH = box.max.y - box.min.y;
+        var targetH = 1.8;
+        var s = natH > 0.01 ? targetH / natH : 1;
         m.scale.setScalar(s);
-        // GLB 朝向修正（讓模型正面對齊容器前方）
-        m.rotation.y = -Math.PI * 0.5;
-        // 腳踩地面
+        // 旋轉：先 model 轉 -90° 修正 GLB 朝向，再整體反轉 180° 讓正面朝外
+        m.rotation.y = Math.PI * 0.5;   // -90°+180° = +90°  最終朝外
+        // 重算縮放後的 BBox，讓腳貼地
+        m.updateMatrixWorld(true);
         var box2 = new THREE.Box3().setFromObject(m);
         m.position.y = -box2.min.y;
         cg.add(m);
     },undefined,function(){
-        // fallback
-        var b=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,1.6,8),new THREE.MeshLambertMaterial({color:art.color}));
-        b.position.y=0.8; cg.add(b);
-        var h2=new THREE.Mesh(new THREE.SphereGeometry(0.4,8,8),new THREE.MeshLambertMaterial({color:art.color}));
-        h2.position.y=2.0; cg.add(h2);
+        var b=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.3,1.2,8),new THREE.MeshLambertMaterial({color:art.color}));
+        b.position.y=0.6; cg.add(b);
+        var h2=new THREE.Mesh(new THREE.SphereGeometry(0.32,8,8),new THREE.MeshLambertMaterial({color:art.color}));
+        h2.position.y=1.6; cg.add(h2);
     });
 
     // 地面光圈

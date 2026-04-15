@@ -532,7 +532,7 @@ async function loadModel(idx,grp){
             const m=gltf.scene;
             m.scale.setScalar(CONFIG.CHAR_SCALE);
             m.rotation.y=CONFIG.CHAR_MODEL_ROTATE;
-            m.traverse(n=>{if(n.isMesh){//}});
+            // traverse removed (shadow off)
             grp.add(m);
             const mixer=new THREE.AnimationMixer(m), a=gltf.animations, ac={};
             if(a[CONFIG.CHAR_IDLE_IDX]){ac.idle=mixer.clipAction(a[CONFIG.CHAR_IDLE_IDX]);ac.idle.play();}
