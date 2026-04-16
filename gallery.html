@@ -230,72 +230,90 @@ var curPoints=[];           // 當前筆觸的點
 var curLine=null;           // 當前筆觸的 Line 物件
 var lastPos=null;           // 上次位置（避免重複點）
 
-// 取得畫筆世界座標
-function getBrushPos(){
-    if(renderer.xr.isPresenting){
-        var wp=new THREE.Vector3();
-        camera.getWorldPosition(wp);
-        var wd=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-        return wp.clone().addScaledVector(wd,0.8);
-    }
-    var d=new THREE.Vector3(Math.sin(fpYaw),0,-Math.cos(fpYaw));
-    return fpPos.clone().addScaledVector(d,4.0);
+// ═══════════════════════════════════════════════════════
+//  畫筆系統：Raycaster 投影（滑鼠/觸控直接對應3D位置）
+// ═══════════════════════════════════════════════════════
+var isDrawing=false, mouseHeld=false;
+var brushColor=new THREE.Color('#ff4444');
+var brushLineWidth=3;
+var allStrokes=[], curPoints=[], curLine=null, lastPos=null;
+
+// 追蹤最新的滑鼠/觸控座標
+var _lastClientX=innerWidth/2, _lastClientY=innerHeight/2;
+var _raycaster=new THREE.Raycaster();
+
+// 核心：把螢幕座標 → 3D 空間（投影到相機前方平面）
+function screenTo3D(clientX, clientY){
+    var rect=cvs.getBoundingClientRect();
+    var nx=((clientX-rect.left)/rect.width)*2-1;
+    var ny=-((clientY-rect.top)/rect.height)*2+1;
+    _raycaster.setFromCamera(new THREE.Vector2(nx,ny), camera);
+
+    // 建立距相機前方 4m 的平面（法向量朝相機）
+    var camDir=new THREE.Vector3(); camera.getWorldDirection(camDir);
+    var camPos=new THREE.Vector3(); camera.getWorldPosition(camPos);
+    var planeOrigin=camPos.clone().addScaledVector(camDir,4.0);
+    var plane=new THREE.Plane().setFromNormalAndCoplanarPoint(
+        camDir.clone().negate(), planeOrigin
+    );
+    var hit=new THREE.Vector3();
+    var ok=_raycaster.ray.intersectPlane(plane,hit);
+    return ok ? hit : null;
 }
 
-function strokeBegin(){
-    // 結束上一筆（若有）
+// VR 模式：從相機視線前方取點
+function getVRBrushPos(){
+    var wp=new THREE.Vector3(); camera.getWorldPosition(wp);
+    var wd=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+    return wp.clone().addScaledVector(wd,0.8);
+}
+
+function strokeBegin(clientX, clientY){
     if(curLine) strokeFinish();
-    curPoints=[];
-    lastPos=null;
-    // 建一條空 Line，之後動態加點
-    var geo=new THREE.BufferGeometry();
+    curPoints=[]; lastPos=null;
+}
+
+function strokeDrawAt(clientX, clientY){
+    var pos=renderer.xr.isPresenting
+        ? getVRBrushPos()
+        : screenTo3D(clientX, clientY);
+    if(!pos) return;
+    if(lastPos&&pos.distanceTo(lastPos)<0.015) return;
+    lastPos=pos.clone();
+    curPoints.push(pos.clone());
+
+    if(curPoints.length<2) return;
+    if(curLine){ curLine.geometry.dispose(); scene.remove(curLine); }
+    var geo=new THREE.BufferGeometry().setFromPoints(curPoints);
     var mat=new THREE.LineBasicMaterial({color:brushColor.clone(),linewidth:brushLineWidth});
     curLine=new THREE.Line(geo,mat);
     scene.add(curLine);
 }
 
-function strokeDraw(){
-    if(!curLine) strokeBegin();
-    var pos=getBrushPos();
-    if(lastPos && pos.distanceTo(lastPos)<0.025) return;
-    lastPos=pos.clone();
-    curPoints.push(pos);
-    // 每次直接重建 geometry（points 數少時很快）
-    curLine.geometry.dispose();
-    curLine.geometry=new THREE.BufferGeometry().setFromPoints(curPoints);
-}
+// VR 用（不需要螢幕座標）
+function strokeDraw(){ strokeDrawAt(_lastClientX,_lastClientY); }
 
 function strokeFinish(){
-    if(!curLine) return;
-    if(curPoints.length<2){
-        // 單點畫小球
-        scene.remove(curLine);
-        curLine.geometry.dispose();
-        if(curPoints.length===1){
-            var pt=new THREE.Mesh(
-                new THREE.SphereGeometry(0.05,6,6),
-                new THREE.MeshBasicMaterial({color:brushColor.clone()})
-            );
-            pt.position.copy(curPoints[0]);
-            scene.add(pt); allStrokes.push(pt);
-        }
-    } else {
+    if(curLine&&curPoints.length>=2){
         allStrokes.push(curLine);
+    } else {
+        if(curLine){ scene.remove(curLine); curLine.geometry.dispose(); }
+        if(curPoints.length===1){
+            var pt=new THREE.Mesh(new THREE.SphereGeometry(0.05,6,6),
+                new THREE.MeshBasicMaterial({color:brushColor.clone()}));
+            pt.position.copy(curPoints[0]); scene.add(pt); allStrokes.push(pt);
+        }
     }
     curLine=null; curPoints=[]; lastPos=null;
     while(allStrokes.length>400){
-        var old=allStrokes.shift();
-        scene.remove(old);
+        var old=allStrokes.shift(); scene.remove(old);
         if(old.geometry) old.geometry.dispose();
     }
 }
 
 function clearAll(){
     if(curLine){scene.remove(curLine);curLine.geometry.dispose();curLine=null;}
-    allStrokes.forEach(function(s){
-        scene.remove(s);
-        if(s.geometry) s.geometry.dispose();
-    });
+    allStrokes.forEach(function(s){scene.remove(s);if(s.geometry)s.geometry.dispose();});
     allStrokes.length=0; curPoints=[]; lastPos=null;
 }
 
@@ -316,17 +334,19 @@ document.getElementById('clear-btn').addEventListener('click',clearAll);
 document.getElementById('clear-mob').addEventListener('touchstart',function(e){e.preventDefault();clearAll();},{passive:false});
 
 var cvs=renderer.domElement;
-// ── 使用 Pointer Events（電腦+觸控通吃，不會中途中斷）──
+cvs.style.touchAction='none'; // 防止手機預設手勢干擾
 cvs.addEventListener('pointerdown',function(e){
     if(e.button!==0&&e.pointerType==='mouse') return;
-    cvs.setPointerCapture(e.pointerId); // 捕捉指標，離開畫布也能繼續畫
+    cvs.setPointerCapture(e.pointerId);
+    _lastClientX=e.clientX; _lastClientY=e.clientY;
     mouseHeld=true; fpDrag=false;
-    if(isDrawing){ strokeBegin(); strokeDraw(); }
+    if(isDrawing){ strokeBegin(e.clientX,e.clientY); strokeDrawAt(e.clientX,e.clientY); }
     else { fpDrag=true; fpDragX=e.clientX; }
 });
 cvs.addEventListener('pointermove',function(e){
+    _lastClientX=e.clientX; _lastClientY=e.clientY;
     if(!mouseHeld) return;
-    if(isDrawing){ strokeDraw(); }
+    if(isDrawing){ strokeDrawAt(e.clientX,e.clientY); }
     else if(fpDrag){ fpYaw-=(e.clientX-fpDragX)*0.004; fpDragX=e.clientX; }
 });
 cvs.addEventListener('pointerup',function(e){
@@ -355,7 +375,8 @@ document.addEventListener('touchstart',function(e){
                 touchIds.cam=t.identifier;
                 mouseHeld=true;
                 if(isDrawing){
-                    strokeBegin(); strokeDraw();
+                    strokeBegin(t.clientX,t.clientY);
+                    strokeDrawAt(t.clientX,t.clientY);
                 } else {
                     fpDrag=true; fpDragX=t.clientX;
                 }
@@ -373,7 +394,7 @@ document.addEventListener('touchmove',function(e){
         }
         if(t.identifier===touchIds.cam){
             if(isDrawing && mouseHeld){
-                strokeDraw();
+                strokeDrawAt(t.clientX,t.clientY);
             } else if(fpDrag && !isDrawing){
                 fpYaw-=(t.clientX-fpDragX)*0.006;
                 fpDragX=t.clientX;
@@ -436,10 +457,10 @@ function animate(){
             fpPos.z-=Math.sin(fpYaw)*vrIn.moveX*SPEED*1.5;
         }
         // 右手扳機：畫點
-        // VR 右手扳機：按住畫線
+        // VR 右手扳機：按住畫線（視線前方）
         if(vrIn.trigR){
-            if(!mouseHeld){ mouseHeld=true; strokeBegin(); }
-            strokeDraw();
+            if(!mouseHeld){ mouseHeld=true; strokeBegin(0,0); }
+            strokeDraw(); // VR 用 getVRBrushPos()
         } else {
             if(mouseHeld){ strokeFinish(); mouseHeld=false; }
         }
