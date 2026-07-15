@@ -88,6 +88,7 @@ const CONFIG = {
     CHAR_IDLE_IDX:      0,
     CHAR_RUN_IDX:       1,
     CHAR_MODEL_ROTATE: -Math.PI * 0.5,
+    MOVE_YAW_OFFSET:   -Math.PI * 0.5,
     SEG_SCALE:          0.6,
     FOOD_COUNT:         4,       // food_0.glb ~ food_3.glb
     FOOD_USE_GLB:       true,
@@ -582,11 +583,21 @@ function updateScore(){document.getElementById('score-ui').innerHTML=`🐍 長�
 function setStatus(a,b=''){document.getElementById('status-ui').innerHTML=a+(b?`<br>${b}`:'');}
 
 function safeAnim(ac,run){
-    if(!ac?.idle||!ac?.run) return;
     try{
-        if(run&&!ac.run.isRunning()){ac.idle.fadeOut(0.2);ac.run.reset().fadeIn(0.2).play();}
-        else if(!run&&ac.run.isRunning()){ac.run.fadeOut(0.2);ac.idle.reset().fadeIn(0.2).play();}
+        if(run){
+            if(ac?.idle?.isRunning()) ac.idle.fadeOut(0.12);
+            if(ac?.run&&!ac.run.isRunning()) ac.run.reset().fadeIn(0.12).play();
+        } else {
+            if(ac?.run?.isRunning()) ac.run.stop();
+            if(ac?.idle?.isRunning()) ac.idle.stop();
+        }
     }catch(e){}
+}
+
+function moveForward(amount){
+    const yaw=myGroup.rotation.y+CONFIG.MOVE_YAW_OFFSET;
+    myGroup.position.x+=Math.sin(yaw)*amount;
+    myGroup.position.z+=Math.cos(yaw)*amount;
 }
 
 // ════════════════════════════════════════
@@ -855,10 +866,7 @@ function animate(){
     if(keys['s']||keys['arrowdown'])  spd=-CONFIG.MOVE_SPEED;
     if(keys['a']||keys['arrowleft'])  myGroup.rotation.y+=CONFIG.TURN_SPEED;
     if(keys['d']||keys['arrowright']) myGroup.rotation.y-=CONFIG.TURN_SPEED;
-    if(spd!==0){
-        myGroup.position.x+=Math.sin(myGroup.rotation.y)*spd;
-        myGroup.position.z+=Math.cos(myGroup.rotation.y)*spd;
-    }
+    if(spd!==0) moveForward(spd);
 
     // 移動（搖桿）
     let joyMoved=false;
@@ -868,8 +876,7 @@ function animate(){
             const wa=Math.atan2(-joyX,-joyY)+camAngle+Math.PI;
             myGroup.rotation.y=wa;
             const js=CONFIG.MOVE_SPEED*d;
-            myGroup.position.x+=Math.sin(wa)*js;
-            myGroup.position.z+=Math.cos(wa)*js;
+            moveForward(js);
             spd=js; joyMoved=true;
         }
     }
