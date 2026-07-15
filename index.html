@@ -503,9 +503,8 @@ async function loadModel(idx,grp){
             m.rotation.y=CONFIG.CHAR_MODEL_ROTATE;
             // traverse removed (shadow off)
             grp.add(m);
-            const mixer=new THREE.AnimationMixer(m), a=gltf.animations, ac={};
-            if(a[CONFIG.CHAR_IDLE_IDX]){ac.idle=mixer.clipAction(a[CONFIG.CHAR_IDLE_IDX]);ac.idle.play();}
-            if(a[CONFIG.CHAR_RUN_IDX]) ac.run=mixer.clipAction(a[CONFIG.CHAR_RUN_IDX]);
+            const mixer=new THREE.AnimationMixer(m), ac=pickAnimationActions(mixer,gltf.animations);
+            safeAnim(ac,false);
             resolve({mixer,actions:ac});
         },undefined,()=>{
             const m=new THREE.Mesh(new THREE.BoxGeometry(0.8,1.8,0.8),new THREE.MeshStandardMaterial({color:students[idx].color}));
@@ -582,14 +581,34 @@ function showFlash(m){const e=document.getElementById('eat-flash');e.textContent
 function updateScore(){document.getElementById('score-ui').innerHTML=`🐍 長度：${myTail.length+1}`;}
 function setStatus(a,b=''){document.getElementById('status-ui').innerHTML=a+(b?`<br>${b}`:'');}
 
+function pickAnimationActions(mixer,clips=[]){
+    const byName=(patterns)=>clips.find(c=>patterns.some(p=>p.test((c.name||'').toLowerCase())));
+    const idleClip=byName([/idle/,/stand/,/breath/,/wait/])||clips[CONFIG.CHAR_IDLE_IDX]||null;
+    const moveClip=byName([/walk/,/run/,/move/,/jog/])||clips.find(c=>c!==idleClip)||clips[CONFIG.CHAR_RUN_IDX]||idleClip;
+    const ac={idle:null,run:null,current:null,hasIdle:!!idleClip,clipNames:clips.map(c=>c.name||'(unnamed)')};
+    if(idleClip) ac.idle=mixer.clipAction(idleClip);
+    if(moveClip) ac.run=mixer.clipAction(moveClip);
+    console.log('[Animation]',ac.clipNames,'idle=',idleClip?.name,'move=',moveClip?.name);
+    return ac;
+}
+
 function safeAnim(ac,run){
     try{
         if(run){
-            if(ac?.idle?.isRunning()) ac.idle.fadeOut(0.12);
-            if(ac?.run&&!ac.run.isRunning()) ac.run.reset().fadeIn(0.12).play();
+            if(ac?.current==='run') return;
+            if(ac?.idle&&ac.idle!==ac.run) ac.idle.stop();
+            if(ac?.run){ac.run.paused=false;ac.run.enabled=true;ac.run.reset().fadeIn(0.12).play();}
+            if(ac) ac.current='run';
         } else {
-            if(ac?.run?.isRunning()) ac.run.stop();
-            if(ac?.idle?.isRunning()) ac.idle.stop();
+            if(ac?.current==='idle') return;
+            if(ac?.run&&ac.run!==ac.idle) ac.run.stop();
+            if(ac?.idle&&ac.hasIdle){
+                ac.idle.paused=false;ac.idle.enabled=true;ac.idle.reset().fadeIn(0.12).play();
+            } else if(ac?.run){
+                ac.run.reset().play();
+                ac.run.paused=true;
+            }
+            if(ac) ac.current='idle';
         }
     }catch(e){}
 }
@@ -604,6 +623,7 @@ function moveForward(amount){
 //  Cloudflare WebSocket 同步
 // ════════════════════════════════════════
 let syncWS=null, syncUploadTimer=null, syncRetryTimer=null, syncRetryDelay=1000;
+let syncMode='none', localChannel=null, localPlayers=new Map(), localFood=[];
 
 function getSyncUrl(){
     const qs=new URLSearchParams(location.search);
@@ -619,8 +639,86 @@ function getSyncUrl(){
 }
 
 function sendSync(type,data={}){
+    if(syncMode==='local') return sendLocalSync(type,data);
     if(!syncWS||syncWS.readyState!==WebSocket.OPEN) return;
     syncWS.send(JSON.stringify({type,...data}));
+}
+
+function currentPlayerState(extra={}){
+    return {
+        uid:userId,x:myGroup.position.x,z:myGroup.position.z,rot:myGroup.rotation.y,idx:myIdx,
+        segCount:myTail.length,isMoving:keys.isMoving||joyActive,lastSeen:Date.now(),...extra
+    };
+}
+
+function makeLocalFood(){
+    if(localFood.length) return localFood;
+    for(let i=0;i<CONFIG.FOOD_MAX;i++){
+        localFood.push({
+            id:'local-'+i,
+            x:(Math.random()*2-1)*CONFIG.FIELD_SIZE,
+            z:(Math.random()*2-1)*CONFIG.FIELD_SIZE,
+            t:Math.floor(Math.random()*CONFIG.FOOD_COUNT)
+        });
+    }
+    return localFood;
+}
+
+function refreshLocalPlayers(){
+    applyPlayersState([currentPlayerState(),...localPlayers.values()]);
+}
+
+function sendLocalSync(type,data={}){
+    if(!localChannel||!userId) return;
+    if(type==='join'||type==='player'){
+        const player=currentPlayerState(data);
+        localChannel.postMessage({type:'player',sender:userId,player});
+        refreshLocalPlayers();
+    } else if(type==='eatFood'){
+        localFood=localFood.filter(f=>f.id!==data.id);
+        localChannel.postMessage({type:'foodGone',sender:userId,id:data.id});
+    } else if(type==='steal'||type==='hit'){
+        localChannel.postMessage({type:'patchPlayer',sender:userId,uid:data.uid,amount:data.amount||1});
+    } else if(type==='newRound'){
+        roundEndTime=Date.now()+(data.duration||CONFIG.ROUND_DURATION)*1000;
+        localFood=[];
+        applyFoodState(makeLocalFood());
+        localChannel.postMessage({type:'newRound',sender:userId,roundEnd:roundEndTime,food:localFood});
+    }
+}
+
+function initLocalSync(){
+    syncMode='local';
+    userId=sessionStorage.getItem('GAME_TAB_UID')||crypto.randomUUID();
+    sessionStorage.setItem('GAME_TAB_UID',userId);
+    db=true;
+    roundEndTime=Date.now()+CONFIG.ROUND_DURATION*1000;
+    localChannel=new BroadcastChannel('GAME_LOCAL_'+SYNC.room);
+    localChannel.onmessage=event=>{
+        const msg=event.data||{};
+        if(msg.sender===userId) return;
+        if(msg.type==='player'&&msg.player){
+            localPlayers.set(msg.player.uid,msg.player);
+            refreshLocalPlayers();
+        } else if(msg.type==='foodGone'){
+            localFood=localFood.filter(f=>f.id!==msg.id);
+            delFoodMesh(msg.id);
+        } else if(msg.type==='patchPlayer'&&msg.uid===userId){
+            const target=Math.max(0,myTail.length-(msg.amount||1));
+            while(myTail.length>target) removeTail();
+            updateScore();
+        } else if(msg.type==='newRound'){
+            roundEndTime=msg.roundEnd||Date.now()+CONFIG.ROUND_DURATION*1000;
+            localFood=msg.food||[];
+            applyFoodState(localFood);
+        }
+    };
+    applySession({roundEnd:roundEndTime});
+    applyFoodState(makeLocalFood());
+    setStatus('🧪 本機分頁測試模式','開第二個分頁可測同步；正式多人請部署 Cloudflare 後用 ?sync=');
+    if(!syncUploadTimer) syncUploadTimer=setInterval(smartUpload,200);
+    setInterval(()=>sendSync('player',currentPlayerState()),1200);
+    setTimeout(()=>sendSync('join',{idx:myIdx}),200);
 }
 
 function applySession(session){
@@ -666,12 +764,13 @@ function applySyncState(data){
 function initSync(){
     const url=getSyncUrl();
     if(!url){
-        setStatus('⚠️ 尚未設定同步伺服器','部署 Cloudflare Worker 後設定 SYNC.endpoint 或網址加 ?sync=');
+        initLocalSync();
         return;
     }
 
-    userId=localStorage.getItem('GAME_UID')||crypto.randomUUID();
-    localStorage.setItem('GAME_UID',userId);
+    syncMode='websocket';
+    userId=sessionStorage.getItem('GAME_TAB_UID')||crypto.randomUUID();
+    sessionStorage.setItem('GAME_TAB_UID',userId);
     setStatus('🔄 連線中...',url.replace(/^wss?:\/\//,''));
 
     clearTimeout(syncRetryTimer);
@@ -689,7 +788,7 @@ function initSync(){
         try{msg=JSON.parse(event.data);}catch(e){return;}
         if(msg.type==='welcome'){
             userId=msg.uid||userId;
-            localStorage.setItem('GAME_UID',userId);
+            sessionStorage.setItem('GAME_TAB_UID',userId);
             applySyncState(msg);
         } else if(msg.type==='state'){
             applySyncState(msg);
