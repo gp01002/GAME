@@ -1,0 +1,11 @@
+name = "game-sync"
+main = "cloudflare-worker.js"
+compatibility_date = "2026-07-15"
+
+[[durable_objects.bindings]]
+name = "GAME_ROOM"
+class_name = "GameRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameRoom"]
